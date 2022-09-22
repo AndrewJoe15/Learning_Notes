@@ -744,6 +744,10 @@ private static void BenchMark()
 
 #### 部署到项目
 
+[部署项目的git仓库](https://github.com/AndrewJoe15/RP_YOLO)
+
+`git clone https://github.com/AndrewJoe15/RP_YOLO`
+
 ##### 添加引用和模型文件
 
 使用VS新建一个桌面程序项目作为我们的目标检测项目（Winform或WPF，本文使用WPF），添加引用，点击浏览，找到我们之前生成的 `Yolov5Net.Scorer.dll`
@@ -820,7 +824,7 @@ namespace RP_YOLO.YOLO.Models
 - `Dimensions` 的值 = 种类数 + 5，我们的数据集一共两个标签，因此 `Dimensions = 7`
 - `Labels` 依次列出所有标签即可，这里我们将 OK 设置为绿色， NG 显示为红色。
 
-##### 单张图片检测
+##### 单张图片输入
 
 我们现在需要一个界面，它具有如下功能
 
@@ -828,3 +832,105 @@ namespace RP_YOLO.YOLO.Models
 - 加载并显示一张图片
 - 运行目标检测并将结果显示到界面
 
+UI界面原型设计如下
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-09-19-10-41-56.png)
+
+用 WPF 实现界面如下：
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-09-21-17-05-33.png)
+
+加载图片与onnx文件
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-09-21-17-08-18.png)
+
+点击运行，执行目标检测算法
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-09-21-17-09-37.png)
+
+点击运行时，执行的主要代码如下
+
+```Csharp
+
+private void btn_run_Click(object sender, RoutedEventArgs e)
+{
+    if (_onnxPath == null)
+    {
+        System.Windows.MessageBox.Show("请先选择onnx文件");
+        return;
+    }
+
+    if (!_isRunning)
+    {
+        _isRunning = true;
+        btn_run.Content = "停止";
+
+        RunDetect();
+    }
+    else
+    {
+        _isRunning = false;
+        btn_run.Content = "运行";
+    }            
+}
+
+private void RunDetect()
+{
+    try
+    {
+        System.Drawing.Image image = System.Drawing.Image.FromFile(_originImagePath);
+
+        ObjectDetect(image);
+
+        uct_detectedImage.ShowImage(image);
+
+    }
+    catch (Exception e)
+    {
+        if (e.GetType() == typeof(System.IO.FileNotFoundException))
+        {
+            System.Windows.MessageBox.Show("请选择源文件");
+        }
+    }
+}
+
+private void ObjectDetect(System.Drawing.Image image)
+{
+    var scorer = new YoloScorer<YOLO.Models.YoloV5AmpouleModel>(_onnxPath);
+
+    List<YoloPrediction> predictions = scorer.Predict(image);
+
+    var graphics = Graphics.FromImage(image);
+
+    foreach (var prediction in predictions) // iterate predictions to draw results
+    {
+        double score = Math.Round(prediction.Score, 2);
+
+        graphics.DrawRectangles(new System.Drawing.Pen(prediction.Label.Color, 2), new[] { prediction.Rectangle });
+
+        var (x, y) = (prediction.Rectangle.X - 3, prediction.Rectangle.Y - 23);
+
+        graphics.DrawString($"{prediction.Label.Name} ({score})",
+            new Font("Consolas", 24, GraphicsUnit.Pixel), new SolidBrush(prediction.Label.Color),
+            new PointF(x, y));
+    }
+}
+```
+
+其中 `ObjectDetect()` 就是调用之前生成的 `Yolov5Net.Scorer.dll` 的相关方法进行目标检测和检测框的可视化，其代码和之前[demo](#使用-yolov5-net-进行目标检测)中的致相同。
+
+左右两部分显示图片，显示区域有点小，也没必要，调整为一个显示区域显示图片，并增加检测识别时间的统计。
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-09-22-16-49-56.png)
+
+至此，YOLO V5 的部署工作已经基本完成。
+
+但是对单张图片的检测并不能满足我们实际项目需求，接下来我们将探索如何使用视频或者相机作为输入。
+
+##### 视频输入
+
+##### 相机输入
+
+### 优化
+
+#### 浮点运算速度优化
