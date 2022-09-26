@@ -1,8 +1,8 @@
+<H1>YOLO V5 部署笔记</H1>
+
 [TOC]
 
-# YOLO V5 部署笔记
-
-## 安装环境
+# 1. 安装环境
 
 在部署YOLO之前，需要安装如下环境：
 
@@ -17,7 +17,7 @@
 - Git
   - 代码版本控制工具
 
-### 安装显卡驱动和CUDA
+## 1.1. 安装显卡驱动和CUDA
 
 在Nvidia官网选择电脑配置的显卡型号，下载相应的[显卡驱动程序](https://www.nvidia.cn/geforce/drivers/)。
 
@@ -29,13 +29,13 @@
 
 若未安装CUDA，在 NVIDIA 官网下载 [CUDA ToolKit](https://developer.nvidia.com/cuda-downloads) 并安装。
 
-### 安装Anaconda
+## 1.2. 安装Anaconda
 
 下载安装 [Anaconda](https://www.anaconda.com/products/distribution) 用来管理 Python 环境。
 
-### 安装Pytorch
+## 1.3. 安装Pytorch
 
-#### 创建虚拟环境
+### 1.3.1. 创建虚拟环境
 
 安装完成Anaconda后，运行`Anaconda Prompt`，执行如下命令以创建一个新环境：
 
@@ -49,7 +49,7 @@
 
 参照 [清华大学开源软件镜像](https://mirrors.tuna.tsinghua.edu.cn/help/anaconda/) 切换第三方源的方法。
 
-#### 安装Pytorch
+### 1.3.2. 安装Pytorch
 
 在[Pytorch官网](https://pytorch.org/get-started/locally/)选择Pytorch安装配置，得到一行安装命令。
 
@@ -61,11 +61,11 @@
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-09-09-15-33-50.png)
 
-### 安装LabelImg
+## 1.4. 安装LabelImg
 
 数据标注工具 LabelImg ([Github](https://github.com/heartexlabs/labelImg))
 
-#### 方式1 pip3
+### 1.4.1. 方式1 pip3
 
 在 Anaconda Prompt 中（base环境下）直接执行如下命令安装
 
@@ -73,7 +73,7 @@
 
 执行`labelImg`打开软件
 
-#### 方式2 从源码编译
+### 1.4.2. 方式2 从源码编译
 
 打开 Git Bash 运行如下命令，下载 LabelImg 源码
 
@@ -89,17 +89,17 @@ pyrcc5 -o libs/resources.py resources.qrc
 
 执行`python labelImg.py`打开软件
 
-#### 方式3 exe
+### 1.4.3. 方式3 exe
 
 下载exe文件 [百度网盘 提取码: vj8f](https://pan.baidu.com/s/1yk8ff56Xu40-ZLBghEQ5nw)
 
-### 安装Git
+## 1.5. 安装Git
 
 选择Windows版本的[Git安装包](https://git-scm.com/download/win)下载安装，所有安装配置默认即可。
 
-## YOLO模型训练
+# 2. YOLO模型训练
 
-### 下载YOLO
+## 2.1. 下载YOLO
 
 在想要存放YOLO的文件夹中右键选择`Git Bash Here`，打开`Git Bash`
 
@@ -109,7 +109,7 @@ pyrcc5 -o libs/resources.py resources.qrc
 
 `git clone https://github.com/ultralytics/yolov5`
 
-### 安装所需的第三方库
+## 2.2. 安装所需的第三方库
 
 使用 Pycharm 打开 YOLO V5 项目
 
@@ -153,9 +153,9 @@ pyrcc5 -o libs/resources.py resources.qrc
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-09-14-16-01-26.png)
 
-### 制作数据集
+## 2.3. 制作数据集
 
-#### 数据标注
+### 2.3.1. 数据标注
 
 使用`labelimg`命令打开labelimg工具，进行数据标注。
 
@@ -179,9 +179,9 @@ pyrcc5 -o libs/resources.py resources.qrc
 
 一张图片标注完成后，按 `Ctrl` + `C` 保存，然后按 `A`/`D` 切换上/下一张图片，依次完成所有图片的标注。 
 
-#### 将数据集添加到YOLO项目中
+### 2.3.2. 将数据集添加到YOLO项目中
 
-##### 拷贝数据集
+#### 2.3.2.1. 拷贝数据集
 
 用 Pycharm 打开 yolov5 项目，在根目录下添加如下几个文件夹
 
@@ -192,7 +192,7 @@ pyrcc5 -o libs/resources.py resources.qrc
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-09-15-09-14-03.png)
 
-##### 数据格式转换
+#### 2.3.2.2. 数据格式转换
 
 在之前我们用 LabelImg 进行数据标注时，使用了 VOC 格式，要在 YOLO 中使用需要转成 YOLO 的数据格式。
 
@@ -326,7 +326,7 @@ print('标注文件转换与数据集划分完成，训练集数量：' + sum_tr
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-09-15-13-24-38.png)
 
-#### 新建配置文件
+### 2.3.3. 新建配置文件
 
 我们已经将数据集放到 YOLO 项目中，接下来需要新建一个该数据集对应的配置文件，用来告诉 YOLO 此数据集的目录位置。
 
@@ -349,9 +349,9 @@ names:
   1: NG
 ```
 
-### 训练
+## 2.4. 训练
 
-#### 下载预训练模型
+### 2.4.1. 下载预训练模型
 
 在[此页面](https://github.com/ultralytics/yolov5/releases)下载预训练模型，即YOLO网络模型的的权重文件
 
@@ -363,7 +363,7 @@ names:
 
 `yolov5s.pt` 相当于我们训练的起点，使用我们自己的数据集进行训练后，会得到我们自己的权重文件。
 
-#### 开始训练
+### 2.4.2. 开始训练
 
 做好了以上所有的准备工作，接下来就可以训练我们的YOLO了，首先打开根目录下的 `train.py` ，在编辑器中右键选择 `Moddify Run Configuration...`，配置训练参数。
 
@@ -387,7 +387,7 @@ names:
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-09-15-14-04-38.png)
 
-### 测试
+## 2.5. 测试
 
 打开根目录下的 `detect.py`，该文件是真正用来进行目标检测的程序
 
@@ -412,7 +412,7 @@ names:
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-09-15-14-45-17.png)
 
-### 输出
+## 2.6. 输出
 
 为了之后的部署，我们需要将训练好的模型输出为`onnx`文件。
 
@@ -443,7 +443,7 @@ $ pip install -r requirements.txt onnx onnx-simplifier onnxruntime-gpu  # GPU
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-09-16-13-21-43.png)
 
-### 部署
+# 3. 部署
 
 接下来我们将使用输出的 `onnx` 文件将 YOLO 部署到我们自己的项目中。
 
@@ -451,11 +451,11 @@ $ pip install -r requirements.txt onnx onnx-simplifier onnxruntime-gpu  # GPU
 
 为了实现这一点，我们可以使用Github上的一个开源仓库[yolov5-net](https://github.com/mentalstack/yolov5-net)。
 
-#### yolov5-net
+## 3.1. yolov5-net
 
 本节的是对[yolov5-net](https://github.com/mentalstack/yolov5-net)项目的简单介绍，最终我们需要它生成`Yolov5Net.Scorer.dll`引用添加到我们最终的项目中，如果对此节内容不感兴趣，可以直接在我的仓库中下载[Yolov5Net.Scorer.dll](https://github.com/AndrewJoe15/RP_YOLO/blob/master/dll/)，并跳过这一节。
 
-##### 下载
+### 3.1.1. 下载
 
 在 Git Bash 中执行如下命令来下载 `yolov5-net`
 
@@ -475,7 +475,7 @@ https://github.com/mentalstack/yolov5-net.git
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-09-16-14-42-32.png)
 
-##### 使用 yolov5-net 进行目标检测
+### 3.1.2. 使用 yolov5-net 进行目标检测
 
 打开 `YoloV5Net-App` 项目下的 `Program.cs`，其 `Main` 函数如下
 
@@ -642,7 +642,7 @@ public class YoloCocoP5Model : YoloModel
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-09-16-15-04-15.png)
 
-##### 性能测试
+### 3.1.3. 性能测试
 
 在 `YoloV5Net-App` 项目下的 `Program.cs` 中添加一些代码，检测100次，看看性能怎么样。
 
@@ -723,7 +723,7 @@ private static void BenchMark()
 
 帧率有所提升，但是还是不够快，这是由于在检测时大量的浮点运算耗费了时间，我们暂时先不做这部分的优化，继续部署我们的项目。
 
-##### 导出 dll
+### 3.1.4. 导出 dll
 
 选中 `Yolov5Net.Scorer` 右键重新生成
 
@@ -742,13 +742,7 @@ private static void BenchMark()
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-09-16-15-26-35.png)
 
-#### 部署到项目
-
-[部署项目的git仓库](https://github.com/AndrewJoe15/RP_YOLO)
-
-`git clone https://github.com/AndrewJoe15/RP_YOLO`
-
-##### 添加引用和模型文件
+### 3.1.5. 添加引用和模型文件
 
 使用VS新建一个桌面程序项目作为我们的目标检测项目（Winform或WPF，本文使用WPF），添加引用，点击浏览，找到我们之前生成的 `Yolov5Net.Scorer.dll`
 
@@ -824,7 +818,7 @@ namespace RP_YOLO.YOLO.Models
 - `Dimensions` 的值 = 种类数 + 5，我们的数据集一共两个标签，因此 `Dimensions = 7`
 - `Labels` 依次列出所有标签即可，这里我们将 OK 设置为绿色， NG 显示为红色。
 
-##### 单张图片输入
+## 3.2. 单张图片输入
 
 我们现在需要一个界面，它具有如下功能
 
@@ -927,10 +921,12 @@ private void ObjectDetect(System.Drawing.Image image)
 
 但是对单张图片的检测并不能满足我们实际项目需求，接下来我们将探索如何使用视频或者相机作为输入。
 
-##### 视频输入
+## 3.3. 视频输入
 
-##### 相机输入
+## 3.4. 相机输入
 
-### 优化
+### 3.4.1. 
 
-#### 浮点运算速度优化
+# 4. 优化
+
+## 4.1. 浮点运算速度优化
