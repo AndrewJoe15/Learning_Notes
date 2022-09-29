@@ -921,11 +921,305 @@ private void ObjectDetect(System.Drawing.Image image)
 
 但是对单张图片的检测并不能满足我们实际项目需求，接下来我们将探索如何使用视频或者相机作为输入。
 
-## 3.3. 视频输入
+## 3.3. 相机输入
 
-## 3.4. 相机输入
+### 3.3.1. MVS例程
 
-### 3.4.1. 
+安装MVS，打开官方自带的样例工程
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-09-26-11-46-08.png)
+
+其中 `BasicDemo` 项目包括了相机查找、连接、图片采集和参数设置等，基本满足我们的需求。
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-09-26-11-55-51.png)
+
+下面是几段关键代码。
+
+点击查找设备按钮：
+- 查找并列出相机设备
+
+```CSharp
+private void DeviceListAcq()
+{
+    // ch:创建设备列表 | en:Create Device List
+    System.GC.Collect();
+    cbDeviceList.Items.Clear();
+    m_stDeviceList.nDeviceNum = 0;
+    int nRet = MyCamera.MV_CC_EnumDevices_NET(MyCamera.MV_GIGE_DEVICE | MyCamera.MV_USB_DEVICE, ref m_stDeviceList);
+    if (0 != nRet)
+    {
+        ShowErrorMsg("Enumerate devices fail!",0);
+        return;
+    }
+
+    // ch:在窗体列表中显示设备名 | en:Display device name in the form list
+    for (int i = 0; i < m_stDeviceList.nDeviceNum; i++)
+    {
+        MyCamera.MV_CC_DEVICE_INFO device = (MyCamera.MV_CC_DEVICE_INFO)Marshal.PtrToStructure(m_stDeviceList.pDeviceInfo[i], typeof(MyCamera.MV_CC_DEVICE_INFO));
+        if (device.nTLayerType == MyCamera.MV_GIGE_DEVICE)
+        {
+            MyCamera.MV_GIGE_DEVICE_INFO gigeInfo = (MyCamera.MV_GIGE_DEVICE_INFO)MyCamera.ByteToStruct(device.SpecialInfo.stGigEInfo, typeof(MyCamera.MV_GIGE_DEVICE_INFO));
+            
+            if (gigeInfo.chUserDefinedName != "")
+            {
+                cbDeviceList.Items.Add("GEV: " + gigeInfo.chUserDefinedName + " (" + gigeInfo.chSerialNumber + ")");
+            }
+            else
+            {
+                cbDeviceList.Items.Add("GEV: " + gigeInfo.chManufacturerName + " " + gigeInfo.chModelName + " (" + gigeInfo.chSerialNumber + ")");
+            }
+        }
+        else if (device.nTLayerType == MyCamera.MV_USB_DEVICE)
+        {
+            MyCamera.MV_USB3_DEVICE_INFO usbInfo = (MyCamera.MV_USB3_DEVICE_INFO)MyCamera.ByteToStruct(device.SpecialInfo.stUsb3VInfo, typeof(MyCamera.MV_USB3_DEVICE_INFO));
+            if (usbInfo.chUserDefinedName != "")
+            {
+                cbDeviceList.Items.Add("U3V: " + usbInfo.chUserDefinedName + " (" + usbInfo.chSerialNumber + ")");
+            }
+            else
+            {
+                cbDeviceList.Items.Add("U3V: " + usbInfo.chManufacturerName + " " + usbInfo.chModelName + " (" + usbInfo.chSerialNumber + ")");
+            }
+        }
+    }
+
+    // ch:选择第一项 | en:Select the first item
+    if (m_stDeviceList.nDeviceNum != 0)
+    {
+        cbDeviceList.SelectedIndex = 0;
+    }
+}
+```
+
+点击打开设备按钮：
+- 打开相机
+- 设置采集模式、参数
+
+```CSharp
+private void bnOpen_Click(object sender, EventArgs e)
+{
+    if (m_stDeviceList.nDeviceNum == 0 || cbDeviceList.SelectedIndex == -1)
+    {
+        ShowErrorMsg("No device, please select", 0);
+        return;
+    }
+
+    // ch:获取选择的设备信息 | en:Get selected device information
+    MyCamera.MV_CC_DEVICE_INFO device = 
+        (MyCamera.MV_CC_DEVICE_INFO)Marshal.PtrToStructure(m_stDeviceList.pDeviceInfo[cbDeviceList.SelectedIndex],
+                                                        typeof(MyCamera.MV_CC_DEVICE_INFO));
+
+    // ch:打开设备 | en:Open device
+    if (null == m_MyCamera)
+    {
+        m_MyCamera = new MyCamera();
+        if (null == m_MyCamera)
+        {
+            return;
+        }
+    }
+
+    int nRet = m_MyCamera.MV_CC_CreateDevice_NET(ref device);
+    if (MyCamera.MV_OK != nRet)
+    {
+        return;
+    }
+
+    nRet = m_MyCamera.MV_CC_OpenDevice_NET();
+    if (MyCamera.MV_OK != nRet)
+    {
+        m_MyCamera.MV_CC_DestroyDevice_NET();
+        ShowErrorMsg("Device open fail!", nRet);
+        return;
+    }
+
+    // ch:探测网络最佳包大小(只对GigE相机有效) | en:Detection network optimal package size(It only works for the GigE camera)
+    if (device.nTLayerType == MyCamera.MV_GIGE_DEVICE)
+    {
+        int nPacketSize = m_MyCamera.MV_CC_GetOptimalPacketSize_NET();
+        if (nPacketSize > 0)
+        {
+            nRet = m_MyCamera.MV_CC_SetIntValue_NET("GevSCPSPacketSize", (uint)nPacketSize);
+            if (nRet != MyCamera.MV_OK)
+            {
+                ShowErrorMsg("Set Packet Size failed!", nRet);
+            }
+        }
+        else
+        {
+            ShowErrorMsg("Get Packet Size failed!", nPacketSize);
+        }
+    }
+
+    // ch:设置采集连续模式 | en:Set Continues Aquisition Mode
+    m_MyCamera.MV_CC_SetEnumValue_NET("AcquisitionMode", (uint)MyCamera.MV_CAM_ACQUISITION_MODE.MV_ACQ_MODE_CONTINUOUS);
+    m_MyCamera.MV_CC_SetEnumValue_NET("TriggerMode", (uint)MyCamera.MV_CAM_TRIGGER_MODE.MV_TRIGGER_MODE_OFF);
+
+    bnGetParam_Click(null, null);// ch:获取参数 | en:Get parameters
+
+    // ch:控件操作 | en:Control operation
+    SetCtrlWhenOpen();
+}
+
+private void bnGetParam_Click(object sender, EventArgs e)
+{
+    MyCamera.MVCC_FLOATVALUE stParam = new MyCamera.MVCC_FLOATVALUE();
+    int nRet = m_MyCamera.MV_CC_GetFloatValue_NET("ExposureTime", ref stParam);
+    if (MyCamera.MV_OK == nRet)
+    {
+        tbExposure.Text = stParam.fCurValue.ToString("F1");
+    }
+
+    nRet = m_MyCamera.MV_CC_GetFloatValue_NET("Gain", ref stParam);
+    if (MyCamera.MV_OK == nRet)
+    {
+        tbGain.Text = stParam.fCurValue.ToString("F1");
+    }
+
+    nRet = m_MyCamera.MV_CC_GetFloatValue_NET("ResultingFrameRate", ref stParam);
+    if (MyCamera.MV_OK == nRet)
+    {
+        tbFrameRate.Text = stParam.fCurValue.ToString("F1");
+    }
+}
+
+private void SetCtrlWhenOpen()
+{
+    bnOpen.Enabled = false;
+
+    bnClose.Enabled = true;
+    bnStartGrab.Enabled = true;
+    bnStopGrab.Enabled = false;
+    bnContinuesMode.Enabled = true;
+    bnContinuesMode.Checked = true;
+    bnTriggerMode.Enabled = true;
+    cbSoftTrigger.Enabled = false;
+    bnTriggerExec.Enabled = false;
+
+    tbExposure.Enabled = true;
+    tbGain.Enabled = true;
+    tbFrameRate.Enabled = true;
+    bnGetParam.Enabled = true;
+    bnSetParam.Enabled = true;
+}
+```
+
+点击开始采集按钮：
+- 启动新线程接受流
+  - 获取图像缓存
+  - 显示图像
+- 开始采集
+
+```CSharp
+private void bnStartGrab_Click(object sender, EventArgs e)
+{
+    // ch:标志位置位true | en:Set position bit true
+    m_bGrabbing = true;
+
+    m_hReceiveThread = new Thread(ReceiveThreadProcess);
+    m_hReceiveThread.Start();
+
+    m_stFrameInfo.nFrameLen = 0;//取流之前先清除帧长度
+    m_stFrameInfo.enPixelType = MyCamera.MvGvspPixelType.PixelType_Gvsp_Undefined;
+    // ch:开始采集 | en:Start Grabbing
+    int nRet = m_MyCamera.MV_CC_StartGrabbing_NET();
+    if (MyCamera.MV_OK != nRet)
+    {
+        m_bGrabbing = false;
+        m_hReceiveThread.Join();
+        ShowErrorMsg("Start Grabbing Fail!", nRet);
+        return;
+    }
+
+    // ch:控件操作 | en:Control Operation
+    SetCtrlWhenStartGrab();
+}
+
+
+public void ReceiveThreadProcess()
+{
+    MyCamera.MV_FRAME_OUT stFrameInfo = new MyCamera.MV_FRAME_OUT();
+    MyCamera.MV_DISPLAY_FRAME_INFO stDisplayInfo = new MyCamera.MV_DISPLAY_FRAME_INFO();
+    int nRet = MyCamera.MV_OK;
+
+    while (m_bGrabbing)
+    {
+        nRet = m_MyCamera.MV_CC_GetImageBuffer_NET(ref stFrameInfo, 1000);
+        if (nRet == MyCamera.MV_OK)
+        {
+            lock (BufForDriverLock)
+            {
+                if (m_BufForDriver == IntPtr.Zero || stFrameInfo.stFrameInfo.nFrameLen > m_nBufSizeForDriver)
+                {
+                    if (m_BufForDriver != IntPtr.Zero)
+                    {
+                        Marshal.Release(m_BufForDriver);
+                        m_BufForDriver = IntPtr.Zero;
+                    }
+
+                    m_BufForDriver = Marshal.AllocHGlobal((Int32)stFrameInfo.stFrameInfo.nFrameLen);
+                    if (m_BufForDriver == IntPtr.Zero)
+                    {
+                        return;
+                    }
+                    m_nBufSizeForDriver = stFrameInfo.stFrameInfo.nFrameLen;
+                }
+
+                m_stFrameInfo = stFrameInfo.stFrameInfo;
+                CopyMemory(m_BufForDriver, stFrameInfo.pBufAddr, stFrameInfo.stFrameInfo.nFrameLen);
+            }
+
+            if (RemoveCustomPixelFormats(stFrameInfo.stFrameInfo.enPixelType))
+            {
+                m_MyCamera.MV_CC_FreeImageBuffer_NET(ref stFrameInfo);
+                continue;
+            }
+            stDisplayInfo.hWnd = pictureBox1.Handle;
+            stDisplayInfo.pData = stFrameInfo.pBufAddr;
+            stDisplayInfo.nDataLen = stFrameInfo.stFrameInfo.nFrameLen;
+            stDisplayInfo.nWidth = stFrameInfo.stFrameInfo.nWidth;
+            stDisplayInfo.nHeight = stFrameInfo.stFrameInfo.nHeight;
+            stDisplayInfo.enPixelType = stFrameInfo.stFrameInfo.enPixelType;
+            m_MyCamera.MV_CC_DisplayOneFrame_NET(ref stDisplayInfo);
+
+            m_MyCamera.MV_CC_FreeImageBuffer_NET(ref stFrameInfo);
+        }
+        else
+        {
+            if (bnTriggerMode.Checked)
+            {
+                Thread.Sleep(5);
+            }
+        }
+    }
+}
+
+private void SetCtrlWhenStartGrab()
+{
+    bnStartGrab.Enabled = false;
+    bnStopGrab.Enabled = true;
+
+    if (bnTriggerMode.Checked && cbSoftTrigger.Checked)
+    {
+        bnTriggerExec.Enabled = true;
+    }
+
+    bnSaveBmp.Enabled = true;
+    bnSaveJpg.Enabled = true;
+    bnSaveTiff.Enabled = true;
+    bnSavePng.Enabled = true;
+}
+```
+
+### 实现
+
+将`MvCameraControl.Net.dll`添加到我们的项目中
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-09-27-11-32-49.png)
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-09-27-11-36-12.png)
+
+新建一个页面
 
 # 4. 优化
 
