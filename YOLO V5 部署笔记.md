@@ -1221,6 +1221,90 @@ private void SetCtrlWhenStartGrab()
 
 新建一个页面
 
+![](imgs/YOLO%20V5%20部署笔记.md/2022-09-30-17-00-53.png)
+
+它与之前的窗口类似，只不过左侧栏由原来的图片浏览列表变成了相机控制台。
+
+`查找相机`、`连接`、`断开`、`开始采集`和`停止采集`按钮的点击事件直接复制海康SDK Demo 中的代码即可。
+
+在获取图像的线程处理函数中，加上我们的目标检测算法和图片显示的代码。
+
+```CSharp
+public void ReceiveThreadProcess()
+{
+    //获取 Payload Size
+    MyCamera.MVCC_INTVALUE stParam = new MyCamera.MVCC_INTVALUE();
+    int nRet = m_MyCamera.MV_CC_GetIntValue_NET("PayloadSize", ref stParam) ;
+
+    if (nRet != MyCamera.MV_OK)
+    {
+        ShowErrorMsg("获取负载大小失败。", nRet);
+        return;
+    }
+    uint nPayloadSize = stParam.nCurValue;
+    //如果负载更大，重新分配缓存
+    if (nPayloadSize > m_nBufSizeForDriver)
+    {
+        if (m_BufForFrame != IntPtr.Zero)
+            Marshal.Release(m_BufForFrame);
+        m_nBufSizeForDriver = nPayloadSize;
+        m_BufForFrame = Marshal.AllocHGlobal((int)m_nBufSizeForDriver);
+    }
+    if (m_BufForFrame == IntPtr.Zero)
+    {
+        return;
+    }
+
+    MyCamera.MV_FRAME_OUT_INFO_EX stFrameInfo = new MyCamera.MV_FRAME_OUT_INFO_EX();
+
+    while (m_bGrabbing)
+    {
+        lock (BufForDriverLock)
+        {
+            //获取单帧数据
+            nRet = m_MyCamera.MV_CC_GetOneFrameTimeout_NET(m_BufForFrame, nPayloadSize, ref stFrameInfo, 1000);
+            if (nRet == MyCamera.MV_OK)
+            {
+                m_stFrameInfo = stFrameInfo;
+            }
+        }
+
+        if (nRet == MyCamera.MV_OK)
+        {
+            if (RemoveCustomPixelFormats(stFrameInfo.enPixelType))
+            {
+                continue;
+            }
+            //创建位图，用来存放帧数据
+            Bitmap bitmap = new Bitmap(m_stFrameInfo.nWidth, m_stFrameInfo.nHeight, PixelFormat.Format8bppIndexed);
+            Rectangle rect = new Rectangle(0, 0, m_stFrameInfo.nWidth, m_stFrameInfo.nHeight);
+            BitmapData bitmapData = bitmap.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format8bppIndexed);
+            unsafe
+            {
+                //拷贝帧数据
+                Buffer.MemoryCopy(m_BufForFrame.ToPointer(), bitmapData.Scan0.ToPointer(), m_nBufSizeForDriver, m_nBufSizeForDriver);
+            }
+            bitmap.UnlockBits(bitmapData);
+
+            if (m_isRunning)
+            {
+                //执行目标检测算法
+                RunDetect(bitmap);
+            }
+            Dispatcher.Invoke(new Action(delegate
+            {
+                //显示图片
+                uct_image.ShowImage(bitmap);
+            }));
+        }
+    }
+}
+```
+
+在上述代码中，主要是使用 `MV_CC_GetOneFrameTimeout_NET()` 获取一帧数据，存放在缓存 `m_BufForFrame` 中，然后把数据拷贝到位图的像素数据内存 `bitmapData.Scan0` 中，最后传入到我们的目标检测函数去处理图片。
+
+> 要注意的是，位图的像素格式 `PixelFormat` 需要根据相机的设置改变，才能正确地解析相机采集的图像。
+
 # 4. 优化
 
 ## 4.1. 浮点运算速度优化
