@@ -435,7 +435,7 @@ $ pip install -r requirements.txt onnx onnx-simplifier onnxruntime-gpu  # GPU
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-09-15-14-55-11.png)
 
-使用我们输出的这个模型文件作为权重，将 `detect.py` 运行配置的 `weights` 改成 `best.onnx`。
+使用我们输出的这个模型文件作为权重，将 `detect.py` 运行配置的 `weights` 改成 `best.onnx`的路径。
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-09-16-13-19-16.png)
 
@@ -1211,6 +1211,10 @@ private void SetCtrlWhenStartGrab()
 }
 ```
 
+海康相机SDK取图流程图：
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-09-29-13-15-15.png)
+
 ### 实现
 
 将`MvCameraControl.Net.dll`添加到我们的项目中
@@ -1276,9 +1280,9 @@ public void ReceiveThreadProcess()
                 continue;
             }
             //创建位图，用来存放帧数据
-            Bitmap bitmap = new Bitmap(m_stFrameInfo.nWidth, m_stFrameInfo.nHeight, PixelFormat.Format8bppIndexed);
+            Bitmap bitmap = new Bitmap(m_stFrameInfo.nWidth, m_stFrameInfo.nHeight, PixelFormat.Format24bppRgb);
             Rectangle rect = new Rectangle(0, 0, m_stFrameInfo.nWidth, m_stFrameInfo.nHeight);
-            BitmapData bitmapData = bitmap.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format8bppIndexed);
+            BitmapData bitmapData = bitmap.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
             unsafe
             {
                 //拷贝帧数据
@@ -1299,12 +1303,234 @@ public void ReceiveThreadProcess()
         }
     }
 }
+
+private void RunDetect(Bitmap bitmap)
+{
+    try
+    {
+        yolov5.ObjectDetect(bitmap, out DetectResult result);
+        Dispatcher.Invoke(new Action(delegate {
+            if (detectResults.Count == 0)
+            {
+                detectResults.Add(new DetectResult());
+            }
+            detectResults.RemoveAt(detectResults.Count - 1);
+            detectResults.Add(result);
+        }));
+    }
+    catch (Exception e)
+    {
+        if (e.GetType() == typeof(System.IO.FileNotFoundException))
+        {
+            System.Windows.MessageBox.Show("请选择源文件");
+        }
+    }
+}
 ```
 
 在上述代码中，主要是使用 `MV_CC_GetOneFrameTimeout_NET()` 获取一帧数据，存放在缓存 `m_BufForFrame` 中，然后把数据拷贝到位图的像素数据内存 `bitmapData.Scan0` 中，最后传入到我们的目标检测函数去处理图片。
 
-> 要注意的是，位图的像素格式 `PixelFormat` 需要根据相机的设置改变，才能正确地解析相机采集的图像。
+> 要注意的是，位图的像素格式 `PixelFormat` 需要根据相机像素格式的设置而改变，才能正确地解析相机采集的图像。
+
+运行查看结果
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-10-10-31-59.png)
+
+发现图像的颜色不太对，这是像素色彩顺序不同导致的，打开MVS将相机的像素格式改为 `BGR 8`。
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-10-10-34-54.png)
+
+运行目标检测程序，一切正常
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-10-10-40-02.png)
+
+
+为了方便后期的调用，我们把 YOLO V5 的相关代码封装成 `YOLOV5` 类：
+
+```CSharp
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using Microsoft.ML.OnnxRuntime;
+using RP_YOLO.Model;
+using Yolov5Net.Scorer;
+using Yolov5Net.Scorer.Models.Abstract;
+
+namespace RP_YOLO.YOLO
+{
+    /// <summary>
+    /// YOLOV5 封装类
+    /// </summary>
+    class YOLOV5<T> where T : YoloModel
+    {
+        private YoloScorer<T> m_scorer;
+
+        public YOLOV5(string onnxPath)
+        {
+            //使用CUDA
+            SessionOptions sessionOptions = new SessionOptions();
+            sessionOptions.AppendExecutionProvider_CUDA();
+            //加载模型文件
+            m_scorer = new YoloScorer<T>(onnxPath, sessionOptions);
+        }
+
+        /// <summary>
+        /// 目标检测
+        /// </summary>
+        /// <param name="image">输出图片</param>
+        /// <param name="quantity">数组 依次存放各个种类的数量</param>
+        /// <param name="during">检测所用时间</param>
+        public void ObjectDetect(System.Drawing.Image image, out DetectResult result)
+        {
+            result = new DetectResult();
+
+            Stopwatch stopwatch = new Stopwatch();//计时器用来计算目标检测算法执行时间
+            stopwatch.Start();
+            List<YoloPrediction> predictions = m_scorer.Predict(image);
+            stopwatch.Stop();
+            result.during = stopwatch.ElapsedMilliseconds;
+
+            var graphics = Graphics.FromImage(image);
+
+            // 遍历预测结果，画出预测框
+            foreach (var prediction in predictions)
+            {
+                double score = Math.Round(prediction.Score, 2);
+
+                graphics.DrawRectangles(new System.Drawing.Pen(prediction.Label.Color, 2), new[] { prediction.Rectangle });
+
+                var (x, y) = (prediction.Rectangle.X - 3, prediction.Rectangle.Y - 23);
+
+                graphics.DrawString($"{prediction.Label.Name} ({score})",
+                    new Font("Consolas", 24, GraphicsUnit.Pixel), new SolidBrush(prediction.Label.Color), new PointF(x, y));
+
+                switch (prediction.Label.Id)
+                {
+                    case 0:
+                        result.OK++;
+                        break;
+                    case 1:
+                        result.NG++;
+                        break;
+                }
+            }
+        }
+    }
+}
+```
+
+最后，我们部署项目的结构如下
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-10-10-44-35.png)
+
+至此，YOLO V5 部署的主要工作就完成了，接下来是一些调优工作，这也是我们的程序能够应用于实际项目的关键。
 
 # 4. 优化
 
 ## 4.1. 浮点运算速度优化
+
+# Debug
+
+## 点击停止采集按钮页面卡死
+
+### 现象
+
+相机采集画面显示时，点击断开连接或停止采集按钮后，界面卡死
+
+### 定位
+
+点击停止采集按钮时执行的函数：
+
+```CSharp
+private void btn_stopGrabbing_Click(object sender, RoutedEventArgs e)
+{
+    // ch:标志位设为false | en:Set flag bit false
+    m_bGrabbing = false;
+    m_hReceiveThread.Join();
+
+    // ch:停止采集 | en:Stop Grabbing
+    int nRet = m_MyCamera.MV_CC_StopGrabbing_NET();
+    if (nRet != MyCamera.MV_OK)
+    {
+        ShowErrorMsg("Stop Grabbing Fail!", nRet);
+    }
+}
+```
+
+调试发现，执行到 `m_hReceiveThread.Join();` 时界面就卡死了，该函数作用是阻止调用线程，直到线程终止。说明问题出在终止线程的过程中。
+
+查看线程的处理函数
+
+```CSharp
+public void ReceiveThreadProcess()
+{
+    ...
+
+    while (m_bGrabbing)
+    {
+        lock (BufForDriverLock)
+        {
+            nRet = m_MyCamera.MV_CC_GetOneFrameTimeout_NET(m_BufForFrame, nPayloadSize, ref stFrameInfo, 1000);
+            if (nRet == MyCamera.MV_OK)
+            {
+                m_stFrameInfo = stFrameInfo;
+            }
+        }
+
+        if (nRet == MyCamera.MV_OK)
+        {
+            if (RemoveCustomPixelFormats(stFrameInfo.enPixelType))
+            {
+                continue;
+            }
+
+            Bitmap bitmap = new Bitmap(m_stFrameInfo.nWidth, m_stFrameInfo.nHeight, PixelFormat.Format8bppIndexed);
+            Rectangle rect = new Rectangle(0, 0, m_stFrameInfo.nWidth, m_stFrameInfo.nHeight);
+            BitmapData bitmapData = bitmap.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format8bppIndexed);
+            unsafe
+            {
+                Buffer.MemoryCopy(m_BufForFrame.ToPointer(), bitmapData.Scan0.ToPointer(), m_nBufSizeForDriver, m_nBufSizeForDriver);
+            }
+            bitmap.UnlockBits(bitmapData);
+
+            if (m_isRunning)
+            {
+                RunDetect(bitmap);
+            }
+            Dispatcher.Invoke(new Action(delegate
+            {
+                uct_image.ShowImage(bitmap);
+            }));
+        }
+    }
+}
+```
+
+在函数的最后，我们使用 `Invoke()` 切到了主 UI 线程显示图片，也就是说，相机采集显示的线程与UI线程关联，界面一直显示图片，线程也就不会结束。
+
+将
+
+```CSharp
+Dispatcher.Invoke(new Action(delegate
+{
+    uct_image.ShowImage(bitmap);
+}));
+```
+注释掉，界面卡死的现象消失，验证了我们的推断。
+
+### 解决
+
+只有在采集图像时，才显示图像，利用图像采集标志位判断一下即可：
+
+```CSharp
+if (m_bGrabbing)
+{
+    Dispatcher.Invoke(new Action(delegate
+    {
+        uct_image.ShowImage(bitmap);
+    }));
+}
+```
+
+因为我们在执行 `m_hReceiveThread.Join();` 前，首先执行了 `m_bGrabbing = false;`，因此不会出错。
