@@ -17,7 +17,7 @@
 - Git
   - 代码版本控制工具
 
-## 1.1. 安装显卡驱动和CUDA
+## 1.1. 安装显卡驱动、CUDA 和 cuDNN
 
 在Nvidia官网选择电脑配置的显卡型号，下载相应的[显卡驱动程序](https://www.nvidia.cn/geforce/drivers/)。
 
@@ -28,6 +28,8 @@
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-08-14-15-02-59.png)
 
 若未安装CUDA，在 NVIDIA 官网下载 [CUDA ToolKit](https://developer.nvidia.com/cuda-downloads) 并安装。
+
+安装好了驱动和CUDA，最后按照此说明[下载安装 cuDNN](https://blog.csdn.net/jhsignal/article/details/111401628)。
 
 ## 1.2. 安装Anaconda
 
@@ -1215,7 +1217,7 @@ private void SetCtrlWhenStartGrab()
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-09-29-13-15-15.png)
 
-### 实现
+### 3.3.2. 实现
 
 将`MvCameraControl.Net.dll`添加到我们的项目中
 
@@ -1426,19 +1428,239 @@ namespace RP_YOLO.YOLO
 
 至此，YOLO V5 部署的主要工作就完成了，接下来是一些调优工作，这也是我们的程序能够应用于实际项目的关键。
 
+## 示例
+
+最后，我们再通过一个示例，完整地回顾一下部署的流程。由于我们之前已经做好了大量工作，所以将我们的示例应用于新项目时一般只需要稍作修改即可。
+
+接下来我们将使用 YOLO V5 来检测螺栓。
+
+### 数据标注
+
+我们在 YOLO V5 项目中新建一些文件夹，用来存放我们的数据集。
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-10-00-33.png)
+
+将拍摄好的螺栓图片存放到 `Image` 文件夹中
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-10-01-32.png)
+
+使用 `LableImg` 软件进行数据标注
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-09-58-43.png)
+
+### 训练
+
+#### 数据集预处理
+
+打开 `xml2yolo.py`
+
+更改分类列表，将数据集的文件夹改为当前数据集的文件夹名
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-11-43-46.png)
+
+运行 `xml2yolo.py` 将数据集标注文件格式转为 `YOLO` 的格式，划分数据集
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-11-20-11.png)
+
+在 `data` 目录下新建一个 `Solder.yaml` 文件
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-11-46-46.png)
+
+与之前的 `Ampoule.yaml` 基本一致，只更改一下分类的名称列表即可：
+
+```yaml
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+path: datasets
+train: images/train
+val: images/val
+
+# Classes
+names:
+  0: Bolt
+```
+
+#### 模型训练与输出
+
+配置 `train.py` 的运行参数，指定权重文件和数据集`yaml`文件
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-11-52-20.png)
+
+运行 `train.py` 开始训练
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-11-56-59.png)
+
+训练完成
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-13-43-20.png)
+
+打开 `export.py` 配置并
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-14-56-46.png)
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-14-57-16.png)
+
+### 部署
+
+将上一步输出得到的 `best.onnx` 文件拷贝到部署项目的 YOLO 模型文件夹下，并重命名为 `yolov5_solder.onnx`
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-14-59-47.png)
+
+添加到工程中
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-15-01-56.png)
+
+在 `YOLO/Models` 文件夹下新建 `YoloV5SolderModel.cs`
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-15-05-26.png)
+
+`YoloV5SolderModel.cs` 相比于之前的 `YoloV5AmpouleModel.cs` 只需要作两处修改：检测类别数量和类别标签列表
+
+```CSharp
+using System.Collections.Generic;
+using System.Drawing;
+
+using Yolov5Net.Scorer;
+using Yolov5Net.Scorer.Models.Abstract;
+
+namespace RP_YOLO.YOLO.Models
+{
+    internal class YoloV5SolderModel : YoloModel
+    {
+        public static int classCount = 1;
+
+        ...
+
+        public override List<YoloLabel> Labels { get; set; } = new List<YoloLabel>()
+        {
+            new YoloLabel { Id = 0, Name = "Bolt" , Color = Color.Green}
+        };
+
+        ...
+    }
+}
+```
+
+最后在 `Window_SingleImageDetect.xaml.cs` 中将 `yolov5` 对象的泛型类型改为 `YoloV5SolderModel` 即可：
+
+```CSharp
+namespace RP_YOLO.View
+{
+    /// <summary>
+    /// Window_SingleImageDetect.xaml 的交互逻辑
+    /// </summary>
+    public partial class Window_CameraStreamDetect : Window
+    {
+        ...
+
+        YOLOV5<YoloV5SolderModel> yolov5;
+
+        ...
+
+        private void btn_browse_modelFile_Click(object sender, RoutedEventArgs e)
+        {
+            ...
+            if (result == System.Windows.Forms.DialogResult.OK)
+            {
+                string onnxPath = tbx_modelFile.Text = openFileDialog.FileName;
+                yolov5 = new YOLOV5<YoloV5SolderModel>(onnxPath);
+            }
+        }
+    }
+}
+```
+
+### 运行
+
+运行程序查看目标检测效果：
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-12-16-47-59.png)
+
 # 4. 优化
+
+我们的程序最主要的部分时采集图像和处理图像，也就是 `ReceiveThreadProcess()` 中 `while` 循环中所作的工作，我们看看是否可以优化其中的操纵来提高程序性能。
+
+首先能想到的时提高目标检测算法运算速度。
+
+计算每轮`while`循环的执行时间：
+
+```CSharp
+public void ReceiveThreadProcess()
+{
+    ...
+
+    while (m_bGrabbing)
+    {
+        m_stopwatch.Restart();//计时
+
+        ...
+        ...
+        ...
+
+        m_stopwatch.Stop();
+        Debug.WriteLine(m_stopwatch.ElapsedMilliseconds);
+    }
+}
+```
+
+结果
+
+> ...
+47
+43
+41
+41
+42
+41
+46
+44
+34
+43
+41
+////// 开始运行目标检测
+961
+86
+91
+82
+87
+88
+83
+466
+96
+75
+82
+93
+88
+113
+108
+84
+77
+96
+84
+...
+
+观察结果可以发现，未运行目标检测时，用时45ms左右，运行目标检测后，第一帧耗时较长，后面基本在80-100ms左右，在此前，因此还有很大的优化空间。
+
+![](imgs/YOLO%20V5%20部署笔记.md/2022-10-14-16-28-27.png)
+
+在对目标检测算法速度进行优化之前，我们先来了解
 
 ## 4.1. 浮点运算速度优化
 
-# Debug
+OpenCL
 
-## 点击停止采集按钮页面卡死
+## 内存优化
 
-### 现象
+
+
+# 5. Debug
+
+## 5.1. 点击停止采集按钮页面卡死
+
+### 5.1.1. 现象
 
 相机采集画面显示时，点击断开连接或停止采集按钮后，界面卡死
 
-### 定位
+### 5.1.2. 定位
 
 点击停止采集按钮时执行的函数：
 
@@ -1507,7 +1729,7 @@ public void ReceiveThreadProcess()
 }
 ```
 
-在函数的最后，我们使用 `Invoke()` 切到了主 UI 线程显示图片，也就是说，相机采集显示的线程与UI线程关联，界面一直显示图片，线程也就不会结束。
+在函数的最后，我们使用 `Invoke()` 切到了主 UI 线程显示图片，也就是说，相机采集显示的线程与UI线程关联，界面一直显示图片，线程也就不会结束（猜测）。
 
 将
 
@@ -1519,7 +1741,9 @@ Dispatcher.Invoke(new Action(delegate
 ```
 注释掉，界面卡死的现象消失，验证了我们的推断。
 
-### 解决
+### 5.1.3. 解决
+
+#### 使用标志位
 
 只有在采集图像时，才显示图像，利用图像采集标志位判断一下即可：
 
@@ -1534,3 +1758,9 @@ if (m_bGrabbing)
 ```
 
 因为我们在执行 `m_hReceiveThread.Join();` 前，首先执行了 `m_bGrabbing = false;`，因此不会出错。
+
+#### 异步调用
+
+当前使用的 `Invoke()` 是同步调用，线程会等待 `Action` 执行完毕后再继续执行，改为异步调用 `InvokeAsync()` 即可解决问题。
+
+## 
