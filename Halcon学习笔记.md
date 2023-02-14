@@ -1,5 +1,7 @@
 <H1> Halcon 学习笔记 </H1>
 
+[TOC]
+
 # 算子
 
 |算子|参数|功能|
@@ -10,6 +12,143 @@
 |`area_center (`<br>`Regions, `<br>`Area, `<br>`Row, `<br>`Column)`|<br>`in` `array[object]` 区域<br>`out` `array[int]` 面积<br>`out` `array[real]` 中心点y<br>`out` `array[real]` 中心点x|计算区域面积和中心点|
 |`<br>`|<br>`out`<br>`in`||
 
+# Halcon/C++ 接口
+
+## 介绍
+
+HALCON/C++ 是 HALCON 针对 C++ 的编程接口，借助 HALCON 库和 HALCON/C++，我们可以在 C++ 程序中进行图像处理。
+
+## 编程方式
+
+HALCON/C++ 接口提供了两种编程方式——面向过程和面向对象编程。面向过程的方法像在 HDevelop 中一样直接调用 HALCON 算子：
+
+```C
+HObject original_image, smoothed_image;
+ReadImage(&original_image, "monkey");
+MeanImage(original_image, &smoothed_image, 11, 11);
+```
+
+上述代码以面向对象的方式则可以改成：
+
+```C
+HImage original_image("monkey");
+HImage smoothed_image = original_image.MeanImage(11, 11);
+```
+
+显然，面向对象的方式可以使用更少的代码实现相同的功能，这也是 HALCON 建议的方式，不过 HDevelop 只能导出面向过程的代码。
+
+## HalconCpp 命名空间
+
+从 HALCON 11 开始，HALCON/C++ 使用 HalconCpp 命名空间来避免与其他 C++ 库产生潜在的命名冲突。
+
+我们有三种方式来指定 HalconCpp 命名空间：
+
+- 特定，在类名和算子前指定
+
+```C
+HalconCpp::HObject original_image, smoothed_image;
+HalconCpp::ReadImage(&original_image, "monkey");
+```
+
+- 局部，在一个块的开始（如一个函数体的开始）指定
+
+```C
+int main(int argc, char *argv[])
+{
+  using namespace HalconCpp;
+  HObject original_image, smoothed_image;
+  ReadImage(&original_image, "monkey");
+  ...
+}
+```
+
+- 全局，在引入头文件之后指定
+
+```C
+#include "HalconCpp.h"
+using namespace HalconCpp;
+```
+
+## 调用 HALCON 算子
+
+《HALCON 算子参考手册》中详细介绍了如何通过 HALCON/C++ 接口调用算子。完整的算子列表参见头文件`e include\halconcpp\HOperatorSet.h`。
+
+### 进一步了解参数
+
+HALCON 有两种参数类型：标志性（iconic）和控制（control）参数。标志性参数与原图像有关（图像、区域、XLD对象等），而控制参数则是一些值，如整型、浮点数、字符串或句柄等。
+
+所谓句柄是一种特殊形式的控制参数。这种类型的一个很典型的代表就是窗口句柄，它让我们可以操作已打开的 HALCON 窗口，例如在窗口中显示一张图像。此外，算子共享复杂数据时也会用到句柄，例如基于形状的匹配中生成并使用模型数据的算子，或者获取输入/输出设备（如图像采集设备）的算子。
+
+标志性参数和控制参数均可作为 HALCON 算子的输出和输出参数。例如，算子`MeanImage`用到了一个标志性输入参数，一个标志性输出参数，以及两个输入控制参数。
+
+HALCON 关于参数的思想，还有一个重要的概念就是——**算子不可修改输入参数**。所以，输入参数通过值（如 Hlong MaskWidth）或常引用（如 const HObject& Image）传递。实例调用算子时，实例和输入参数一样，也不改变值。因此，下面的代码中原始图像没有改变，模糊的图像在返回值中返回。
+
+```C
+HImage original_image("monkey");
+HImage smoothed_image = original_image.MeanImage(11, 11);
+```
+
+与输入参数不同，输出参数总会被修改，因此，输出参数一定是使用引用传递的。需要注意的是，算子需要一个指针指向一个已经存在的变量或类实例。如下面几行代码，当调用算子 `FindBarCode` 时，首先声明类 `HString` 的变量，然后传递给相应指针（带有操作符 `&` ）。
+
+```C
+HImage image("barcode/ean13/ean1301");
+HBarCode barcode(HTuple(), HTuple());
+HString result;
+HRegion code_region = barcode.FindBarCode(image, "EAN-13", &result);
+```
+
+上面的例子还反映了输出参数另一个有意思的地方：当通过类调用算子时，其中一个输出参数可能会编程返回值；在本例中 `FindBarCode` 返回了条形码区域。
+
+许多 HALCON 算子的某些参数可以接受多值。例如，你可以使用图像数组来调用算子 `MeanImage` ，然后就会返回一个平滑后的图像数组。这就是所谓的元组模式（tuple mode）。
+
+### 字符串参数
+
+不管 HALCON 库的编码（`set_system('filename_encoding', ...)`）是什么，HALCON/C++ 接口都需要原始字符指针字符串（传给 HALCON 算子和元组或字符串实例）是 UTF-8 编码的。
+
+输出字符串是 `HString` 类型的，该类型会自动进行内存管理。输出字符串的默认编码格式也是 UTF-8。
+
+在下面的例子中，算子 `InfoFramegrabber` 有两个输出字符串参数：
+
+```C
+HString sInfo, sValue;
+InfoFramegrabber(FGName, "info_boards", &sInfo, &sValue);
+```
+
+注意输出字符串返回 `HTuple` 类型也不需要分配内存：
+
+```C
+HTuple tInfo, tValues;
+InfoFramegrabber(FGName, "info_boards", &tInfo, &tValues);
+```
+
+### 使用类调用算子
+
+在前面的部分已经提到过，当使用类的实例去调用对象时，该实例对应的输入参数就不会出现在算子参数列表中。
+
+同时，第一个输出参数也会变成返回值返回。
+
+```C
+HImage image("barcode/ean13/ean1301");
+HBarCode barcode(HTuple(), HTuple());
+HString result;
+HRegion code_region = barcode.FindBarCode(image, "EAN-13", &result);
+```
+
+```C
+HRegion code_region = image.FindBarCode(barcode, "EAN-13", &result);
+```
+
+```C
+HObject image;
+HTuple barcode;
+HObject code_region;
+HTuple result;
+ReadImage(&image, "barcode/ean13/ean1301");
+CreateBarCodeModel(HTuple(), HTuple(), &barcode);
+FindBarCode(image, &code_region, barcode, "EAN-13", &result);
+```
+
+### 构造函数和 Halcon 算子
 
 # 技术
 

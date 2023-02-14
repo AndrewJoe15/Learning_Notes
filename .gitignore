@@ -1,3 +1,5 @@
 *.html
 
 .vs/
+*.mp4
+*.pptx
