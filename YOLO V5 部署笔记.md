@@ -12,6 +12,8 @@
   - 深度学习框架
 - [CUDA](#安装显卡驱动和cuda)
   - 用于模型训练时显卡加速
+- [PyCharm](https://www.jetbrains.com/pycharm/)
+  - Python 开发 IDE
 - LaelImg
   - 图片标注工具
 - Git
@@ -1598,7 +1600,7 @@ namespace RP_YOLO.View
 
 ## 4.2. 预测过程
 
-## 训练参数
+## 4.3. 训练参数
 
 
 
@@ -2469,7 +2471,7 @@ private void cbb_modelType_SelectionChanged(object sender, SelectionChangedEvent
 }
 ```
 
-### 默认模型参数
+### 6.2.4. 默认模型参数
 
 在之前我们提到希望在选择 `onnx` 文件后，程序能够自动加载Default的参数配置，其中标签的数量根据onnx模型文件的输出来获取，标签名默认为Class1 Class2……
 
@@ -2628,7 +2630,7 @@ private void AddLabels(YoloModel yoloModel)
 }
 ```
 
-## 实现ROI模块功能
+## 6.3. 实现ROI模块功能
 
 YOLO V5 的输入图像尺寸为 $[640, 640]$，当输入图像尺寸过大时，会首先执行`ResizeImage()`对图像进行压缩，将其缩放到输入尺寸：
 
@@ -2684,7 +2686,7 @@ private Bitmap ResizeImage(Image image)
 - 裁剪图像
   - 将相机采集的图像按ROI框的区域进行裁剪
 
-### ROI控件
+### 6.3.1. ROI控件
 
 首先我们添加一个继承自 `DrawingVisual` 的类，它用来画出ROI的边框和锚点。
 
@@ -3113,7 +3115,7 @@ public class ROICanvas : Canvas
 
 上述代码定义了ROI的一些属性：左上锚点、右下锚点、中心点、宽和高。鼠标靠近锚点，拖动锚点可以改变ROI的形状，鼠标在ROI框内可以拖动ROI框。
 
-### 添加用户控件
+### 6.3.2. 添加用户控件
 
 上一节我们添加了ROI控件类，现在我们来把控件放到页面中。首先需要添加命名控件指向 `ROI` 控件类所在的目录，然后添加元素，配置属性。
 
@@ -3187,7 +3189,7 @@ public class ROICanvas : Canvas
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-11-24-13-37-44.png)
 
-### 数据绑定
+### 6.3.3. 数据绑定
 
 对于添加的几个控件，我们的需求如下：
 
@@ -3462,7 +3464,7 @@ public class BoolInverseConverter : IValueConverter
 
 ![](imgs/YOLO%20V5%20部署笔记.md/2022-11-24-14-25-49.png)
 
-### 输入图像的裁剪
+### 6.3.4. 输入图像的裁剪
 
 此前我们实现了ROI的基础功能，但有一个隐藏的问题：此时ROI框的宽高并不是实际所框选区域的原始像素尺寸，这是因为图像并不是按原始分辨率显示的，在图像显示区的画面是经过缩放的。以海康的一款200万像素相机（MV-CA020-10GM）为例，它的分辨率是 $1624*1240$，显然除非我们的屏幕分辨率足够大，否则不可能放得下那么大尺寸的图片。
 
