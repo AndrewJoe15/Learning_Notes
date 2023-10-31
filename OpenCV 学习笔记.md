@@ -284,7 +284,7 @@ $$
 
 接下来，我们读取一幅图像并应用我们的压缩算法。
 
-在OpenCV中，遍历一副图像的所有像素主要有三种方法。我们使用三种方法，统计每一种方法的耗时。
+在OpenCV中，遍历一副图像的所有像素主要有三种方法。我们会使用三种方法，统计每一种方法的耗时。
 
 首先是计算查找表：
 
@@ -315,6 +315,188 @@ BGR色彩系统：
 ![](imgs/OpenCV%20学习笔记.md/2023-10-27-16-36-56.png)
 
 在大多数情况下，内存空间是足够的，可以一行接一行地连续存储，形成一行长长的数据，这种情况可以加快我们的遍历速度。使用`cv::Mat::isContinuous()`可以判断矩阵是否处于这种情况。
+
+#### 更有效率的方式
+
+我们已经了解了查找表和图像矩阵的连续存储，利用这两点，我们可以用更有效率的方式应用我们的压缩算法。
+
+```C++
+Mat& ScanImageAndReduceC(Mat& I, const uchar* const table)
+{
+  // accept only char type matrices
+  CV_Assert(I.depth() == CV_8U);
+  int channels = I.channels();
+  int nRows = I.rows;
+  int nCols = I.cols * channels;
+  if (I.isContinuous())
+  {
+    nCols *= nRows;
+    nRows = 1;
+  }
+  int i,j;
+  uchar* p;
+  for( i = 0; i < nRows; ++i)
+  {
+      p = I.ptr<uchar>(i);
+    for ( j = 0; j < nCols; ++j)
+    {
+      p[j] = table[p[j]];
+    }
+  }
+  return I;
+}
+```
+
+这里我们基本上只获取了每一行开始的指针，并遍历每一行。在特殊的情况下，矩阵以连续方式存储，这时我们只需要获取第一行开始的指针进行遍历即可。
+
+我们需要查找彩色图像，所以我们有三个通道，每行需要遍历三倍的元素。
+
+有另一种方式，`Mat`对象的`data`数据成员返回第一行第一列的指针。如果图像是连续存储的，我们可以以此遍历整个数据的指针。
+
+对于灰度图像：
+
+```C++
+uchar* p = I.data;
+for( unsigned int i = 0; i < ncol*nrows; ++i)
+  *p++ = table[*p];
+```
+
+这种方式得到的结果相同，但代码可读性略差。
+
+#### 迭代器（安全）方式
+
+在上一节中，我们负责保证遍历`uchar`字段的数目正确并跳过行间可能有的地址间隔。
+
+迭代器的方式更安全，因为它取代了我们完成这些任务。我们需要做的只是访问图像矩阵的开头和结尾，增加开始的迭代器直到结尾。
+
+获取迭代器指向的值需要使用`*`操作符。
+
+```C++
+Mat& ScanImageAndReduceIterator(Mat& I, const uchar* const table)
+{
+  // accept only char type matrices
+  CV_Assert(I.depth() == CV_8U);
+  const int channels = I.channels();
+  switch(channels)
+  {
+    case 1:
+    {
+      MatIterator_<uchar> it, end;
+      for( it = I.begin<uchar>(), end = I.end<uchar>(); it != end; ++it)
+        *it = table[*it];
+      break;
+    }
+    case 3:
+    {
+      MatIterator_<Vec3b> it, end;
+      for( it = I.begin<Vec3b>(), end = I.end<Vec3b>(); it != end; ++it)
+      {
+        (*it)[0] = table[(*it)[0]];
+        (*it)[1] = table[(*it)[1]];
+        (*it)[2] = table[(*it)[2]];
+      }
+    }
+  }
+  return I;
+}
+```
+
+如果是彩色图像，每一列有三个`uchar`元素。这可以看作一个短向量，在OpenCV中命名为`Vec3b`。要获取第n个子列，我们可以使用`[]`操作符。
+
+OpenCV的迭代器遍历每一列并自动跳到下一行。因此，对于彩色图像，如果只是简单使用一个`uchar`迭代器，只能获取到蓝色通道的值。
+
+#### 带引用返回的动态地址计算
+
+最后一种方法，`cv::Mat::at()`，不建议用于扫描图像，它用来获取或修改图像中随机的元素。
+
+```C++
+Mat& ScanImageAndReduceRandomAccess(Mat& I, const uchar* const table)
+{
+  // accept only char type matrices
+  CV_Assert(I.depth() == CV_8U);
+  const int channels = I.channels();
+  switch(channels)
+  {
+    case 1:
+    {
+      for( int i = 0; i < I.rows; ++i)
+        for( int j = 0; j < I.cols; ++j )
+          I.at<uchar>(i,j) = table[I.at<uchar>(i,j)];
+      break;
+    }
+    case 3:
+    {
+      Mat_<Vec3b> _I = I;
+      for( int i = 0; i < I.rows; ++i)
+        for( int j = 0; j < I.cols; ++j )
+        {
+          _I(i,j)[0] = table[_I(i,j)[0]];
+          _I(i,j)[1] = table[_I(i,j)[1]];
+          _I(i,j)[2] = table[_I(i,j)[2]];
+        }
+      I = _I;
+      break;
+    }
+  }
+  return I;
+}
+```
+
+`cv::Mat::at()`依据输入的函数类型和坐标参数计算查询项的地址，然后返回指向它的一个引用。
+
+出于安全，在Debug模式下会检查输入坐标是否有效且存在。
+
+如果你需要多次查找，每次都需要输入类型和`at`关键字会很麻烦，OpenCV中有`cv::Mat_`数据类型可以解决这个问题。和`Mat`一样，需要在定义的时候指定数据类型。不过，不同的是，你可以使用`()`操作符进行快速访问。这实现的效果（运行时间也一样）和`at`一样，只是写法上更简便一些。
+
+如上面例子中演示的，我们很容易就可以实现`cv::Mat`和`cv::Mat_`数据类型的相互转化。
+
+#### 核心模块函数
+
+在图像处理中，我们经常会修改给定图像的值。OpenCV核心模块提供的`cv::LUT()`函数函数来修改图像的值，不需要编写扫描图像的逻辑。
+
+首先我们构建一个`Mat`类型的查找表：
+
+```C++
+Mat lookUpTable(1, 256, CV_8U);
+uchar* p = lookUpTable.ptr();
+for( int i = 0; i < 256; ++i)
+  p[i] = table[i];
+```
+
+然后调用函数：
+
+```C++
+LUT(I, lookUpTable, J);
+```
+
+#### 性能差异
+
+|方法|用时(ms)|
+|:-|:-|
+|有效率的方法|79.4717|
+|迭代器|83.7201|
+|动态地址|93.7878|
+|LUT函数|32.5759|
+
+最快的方法是LUT函数。这是因为OpenCV库是通过英特尔线程构建块启用多线程的。但是，如果需要编写一个简单的图像扫描，首选指针方法。迭代器是一种更安全的选择，但是相当慢。在调试模式下，使用动态引用访问方法进行全像扫描是成本最高的。
+
+### 矩阵掩膜操作
+
+掩膜操作就是：根据掩膜矩阵（或者叫核）重新计算图像每个像素的值。掩膜存储的值决定了对当前及其相邻像素影响的大小。从数学角度来看，我们的计算即使用一些特定的数值来求加权平均。
+
+#### 测试用例
+
+接下来我们来考虑一种图像对比度增强算法的问题。对图像的每个像素应用如下公式：
+$$
+I(i,j) = 5 * I(i,j) - [I(i-1,j) + I(i+1,j) + I(i,j-1) + I(i,j+1)] \\
+\leftrightarrows I(i,j) * M,  \\
+M = \begin{matrix}
+  i/j & -1 & 0 & +1 \\
+  -1 & 0 & -1 & 0 \\
+  0 & -1 & 5 & -1 \\
+  +1 & 0 & -1 & 0
+\end{matrix}
+$$
 
 # 参考资料
 - [OpenCV官方教程](https://docs.opencv.org/4.x/d9/df8/tutorial_root.html)
