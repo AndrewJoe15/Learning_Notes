@@ -493,10 +493,239 @@ I(i,j) = 5 * I(i,j) - [I(i-1,j) + I(i+1,j) + I(i,j-1) + I(i,j+1)] \\
 M = \begin{matrix}
   i/j & -1 & 0 & +1 \\
   -1 & 0 & -1 & 0 \\
-  0 & -1 & 5 & -1 \\
+  0 & \Bigg[-1 & 5 & -1\Bigg] \\
   +1 & 0 & -1 & 0
 \end{matrix}
 $$
+
+##### 代码
+
+此代码在OpenCV源代码库的示例文件目录中： `samples/cpp/tutorial_code/core/mat_mask_operations/mat_mask_operations.cpp`
+
+```C++
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
+#include <iostream>
+using namespace std;
+using namespace cv;
+static void help(char* progName)
+{
+    cout << endl
+        <<  "This program shows how to filter images with mask: the write it yourself and the"
+        << "filter2d way. " << endl
+        <<  "Usage:"                                                                        << endl
+        << progName << " [image_path -- default lena.jpg] [G -- grayscale] "        << endl << endl;
+}
+void Sharpen(const Mat& myImage,Mat& Result);
+int main( int argc, char* argv[])
+{
+    help(argv[0]);
+    const char* filename = argc >=2 ? argv[1] : "lena.jpg";
+    Mat src, dst0, dst1;
+    if (argc >= 3 && !strcmp("G", argv[2]))
+        src = imread( samples::findFile( filename ), IMREAD_GRAYSCALE);
+    else
+        src = imread( samples::findFile( filename ), IMREAD_COLOR);
+    if (src.empty())
+    {
+        cerr << "Can't open image ["  << filename << "]" << endl;
+        return EXIT_FAILURE;
+    }
+    namedWindow("Input", WINDOW_AUTOSIZE);
+    namedWindow("Output", WINDOW_AUTOSIZE);
+    imshow( "Input", src );
+    double t = (double)getTickCount();
+    Sharpen( src, dst0 );
+    t = ((double)getTickCount() - t)/getTickFrequency();
+    cout << "Hand written function time passed in seconds: " << t << endl;
+    imshow( "Output", dst0 );
+    waitKey();
+    Mat kernel = (Mat_<char>(3,3) <<  0, -1,  0,
+                                   -1,  5, -1,
+                                    0, -1,  0);
+    t = (double)getTickCount();
+    filter2D( src, dst1, src.depth(), kernel );
+    t = ((double)getTickCount() - t)/getTickFrequency();
+    cout << "Built-in filter2D time passed in seconds:     " << t << endl;
+    imshow( "Output", dst1 );
+    waitKey();
+    return EXIT_SUCCESS;
+}
+void Sharpen(const Mat& myImage,Mat& Result)
+{
+    CV_Assert(myImage.depth() == CV_8U);  // accept only uchar images
+    const int nChannels = myImage.channels();
+    Result.create(myImage.size(),myImage.type());
+    for(int j = 1 ; j < myImage.rows-1; ++j)
+    {
+        const uchar* previous = myImage.ptr<uchar>(j - 1);
+        const uchar* current  = myImage.ptr<uchar>(j    );
+        const uchar* next     = myImage.ptr<uchar>(j + 1);
+        uchar* output = Result.ptr<uchar>(j);
+        for(int i= nChannels;i < nChannels*(myImage.cols-1); ++i)
+        {
+            output[i] = saturate_cast<uchar>(5*current[i]
+                         -current[i-nChannels] - current[i+nChannels] - previous[i] - next[i]);
+        }
+    }
+    Result.row(0).setTo(Scalar(0));
+    Result.row(Result.rows-1).setTo(Scalar(0));
+    Result.col(0).setTo(Scalar(0));
+    Result.col(Result.cols-1).setTo(Scalar(0));
+}
+```
+
+现在我们来看看代码是如何实现的。
+
+#### 基本的方法
+
+```C++
+void Sharpen(const Mat& myImage,Mat& Result)
+{
+    CV_Assert(myImage.depth() == CV_8U);  // accept only uchar images
+    const int nChannels = myImage.channels();
+    Result.create(myImage.size(),myImage.type());
+    for(int j = 1 ; j < myImage.rows-1; ++j)
+    {
+        const uchar* previous = myImage.ptr<uchar>(j - 1);
+        const uchar* current  = myImage.ptr<uchar>(j    );
+        const uchar* next     = myImage.ptr<uchar>(j + 1);
+        uchar* output = Result.ptr<uchar>(j);
+        for(int i= nChannels;i < nChannels*(myImage.cols-1); ++i)
+        {
+            output[i] = saturate_cast<uchar>(5*current[i]
+                         -current[i-nChannels] - current[i+nChannels] - previous[i] - next[i]);
+        }
+    }
+    Result.row(0).setTo(Scalar(0));
+    Result.row(Result.rows-1).setTo(Scalar(0));
+    Result.col(0).setTo(Scalar(0));
+    Result.col(Result.cols-1).setTo(Scalar(0));
+}
+```
+
+首先我们确保输入图像数据是无符号字符格式的。我们使用`cv::CV_Assert`函数，如果判断为`false`将会抛出一个错误。
+
+```C++
+    CV_Assert(myImage.depth() == CV_8U);  // accept only uchar images
+```
+
+获取通道数，我们可以知道有多少个子列需要遍历。
+
+```C++
+    const int nChannels = myImage.channels();
+```
+
+我们创建一个输出图像，它的尺寸和类型与输入图像相同。
+
+```C++
+    Result.create(myImage.size(),myImage.type());
+```
+
+我们使用纯C语言的`[]`操作符来获取像素。因为我们需要同时获取多行，所以我们每行分别取一个指针（前一行、当前行和下一行）。
+
+```C++
+    for(int j = 1 ; j < myImage.rows-1; ++j)
+    {
+        const uchar* previous = myImage.ptr<uchar>(j - 1);
+        const uchar* current  = myImage.ptr<uchar>(j    );
+        const uchar* next     = myImage.ptr<uchar>(j + 1);
+        uchar* output = Result.ptr<uchar>(j);
+        for(int i= nChannels;i < nChannels*(myImage.cols-1); ++i)
+        {
+            output[i] = saturate_cast<uchar>(5*current[i]
+                         -current[i-nChannels] - current[i+nChannels] - previous[i] - next[i]);
+        }
+    }
+```
+
+在上面提到的公式中，图像边缘的一些像素位置是不存在的（例如（-1，-1））。比较简单的解决办法是对于边缘像素不应用公式，而是把像素值都置为0。
+
+#### `filter2D` 函数
+
+上面的操作在图像处理中是很常见的，OpenCV有一个函数负责掩膜操作——`filter2D()`。
+
+首先我们需要定义一个`Mat`对象作为掩膜。
+
+```C++
+    filter2D( src, dst1, src.depth(), kernel );
+```
+
+该函数还有几个额外的参数：
+
+- 参数5，指定掩膜的中心
+- 参数6，将计算后的像素值加上一个值
+- 参数7，决定对边缘像素的操作
+
+OpenCV对`filter2D()`有所优化，因此比我们自己写的算法运算速度要快。
+
+### 图像操作
+
+#### 输入输出
+
+加载图像
+
+```C++
+        Mat img = imread(filename);
+        Mat img_gray = imread(filename, IMREAD_GRAYSCALE);
+```
+
+> 格式取决于开头几个字节的内容
+
+保存图像
+
+```C++
+        imwrite(filename, img);
+```
+
+> 格式取决于扩展名
+
+使用`cv::imdecode`和`cv::imencode`可以读取内存中而不是文件中的图像。
+
+#### 图像基本操作
+
+##### 获取像素值
+
+为了获取像素强度值，我们可以需要知道图像类型和通道数。
+
+对于单通道灰度图像（类型`8UC1`）：
+
+```C++
+          Scalar intensity = img.at<uchar>(y, x);
+```
+
+> 注意 `x` `y` 的顺序。
+
+或者，我们也可以使用如下的写法：
+
+```C++
+          Scalar intensity = img.at<uchar>(Point(x, y));
+```
+
+对于三通道（BGR）图像:
+
+```C++
+          Vec3b intensity = img.at<Vec3b>(y, x);
+          uchar blue = intensity.val[0];
+          uchar green = intensity.val[1];
+          uchar red = intensity.val[2];
+```
+
+同样地，我们也可以更改像素值：
+
+```C++
+          img.at<uchar>(y, x) = 128;
+```
+
+对于一个`Mat`对象，我们也可以用同样的方法获取一个点：
+
+```C++
+          vector<Point2f> points;
+          //... fill the array
+          Mat pointsMat = Mat(points);
+          Point2f point = pointsMat.at<Point2f>(i, 0);
+```
 
 # 参考资料
 - [OpenCV官方教程](https://docs.opencv.org/4.x/d9/df8/tutorial_root.html)
