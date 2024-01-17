@@ -727,5 +727,11 @@ OpenCV对`filter2D()`有所优化，因此比我们自己写的算法运算速�
           Point2f point = pointsMat.at<Point2f>(i, 0);
 ```
 
+##### 内存管理和引用计数
+
+在实际应用中，对于同一个数据，我们可能会有多个`Mat`实例。`Mat`使用引用计数来判断是否可以清理数据。在之前[Mat/引用计数](#引用计数)中我们已经讲到过。
+
+
+
 # 参考资料
 - [OpenCV官方教程](https://docs.opencv.org/4.x/d9/df8/tutorial_root.html)
