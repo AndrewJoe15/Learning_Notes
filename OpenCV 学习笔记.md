@@ -219,7 +219,7 @@ A.copyTo(G);
   
   然后，我们需要指定存储元素的数据类型和通道数，即宏变量`CV_8UC3`的作用，它遵从以下约定。
 
-  `CV_[The number of bits per item][Signed or Unsigned][Type Prefix]C[The channel number]`
+  `CV_[The number of bits per item][Signed or Unsigned][Type Prefix][The channel number]`
 
   `CV_8UC3`表示数值类型使用8bit无符号`char`类型，每个像素有3个数值对应3个通道。
 
@@ -229,7 +229,7 @@ A.copyTo(G);
   Mat L(3,sz, CV_8UC(1), Scalar::all(0));
   ```
 
-  对于高于二维的矩阵，可以使用上述的方法，使用数组指定每个维度的尺寸。
+  对于高于二维的矩阵，可以使用上述的方法，先指定维度，再使用数组指定每个维度的尺寸。
 
 - `cv::Mat::create`函数
   ```C++
@@ -238,7 +238,7 @@ A.copyTo(G);
   ```
   此种方式不能初始化矩阵值。
 
-- MATLAB 风格的初始化器：`cv::Mat::zeros``cv::Mat::ones``cv::Mat::eye`。
+- MATLAB 风格的初始化器：`cv::Mat::eye``cv::Mat::zeros``cv::Mat::ones`，分别可创建单位（Identity, I -> Eye）矩阵、全1矩阵和全0矩阵。
   ```C++
   Mat E = Mat::eye(4, 4, CV_64F);
   cout << "E = " << endl << " " << E << endl << endl;
@@ -687,7 +687,7 @@ OpenCV对`filter2D()`有所优化，因此比我们自己写的算法运算速�
 
 ##### 获取像素值
 
-为了获取像素强度值，我们可以需要知道图像类型和通道数。
+为了获取像素强度值，我们需要知道图像类型和通道数。
 
 对于单通道灰度图像（类型`8UC1`）：
 
@@ -731,6 +731,446 @@ OpenCV对`filter2D()`有所优化，因此比我们自己写的算法运算速�
 
 在实际应用中，对于同一个数据，我们可能会有多个`Mat`实例。`Mat`使用引用计数来判断是否可以清理数据。在之前[Mat/引用计数](#引用计数)中我们已经讲到过。
 
+##### 原始操作
+
+矩阵中有一些用起来很方便的操作。
+
+比如，对一个灰度图像`img`，可以用如下方法将其变为一个纯黑图像：
+```C++
+img = Scalar(0);
+```
+选择一个感兴趣区域：
+```C++
+Rect r(10, 10, 100, 100);
+Mat smallImg = img(r);
+```
+彩色图像转灰度图像：
+```C++
+Mat img = imread("image.jpg");
+Mat grey;
+cvtColor(img, grey, COLOR_BGR2GRAY);
+```
+更改图像类型：
+```C++
+src.convertTo(dst, CV_32F);
+```
+
+##### 图像可视化
+
+OpenCV提供了方便的图像可视化方法：
+
+```C++
+Mat img = imread("image.jpg");
+namedWindow("image", WINDOW_AUTOSIZE);
+imshow("image", img);
+waitKey();
+```
+
+`waitKey()`将调用一个消息传递循环，图像窗口将等待一个任意按键被按下。
+32位浮点类型的图像需要转换成8位无符号类型：
+```C++
+Mat img = imread("image.jpg");
+Mat grey;
+cvtColor(img, grey, COLOR_BGR2GRAY);
+Mat sobelx;
+Sobel(grey, sobelx, CV_32F, 1, 0);
+double minVal, maxVal;
+minMaxLoc(sobelx, &minVal, &maxVal); //find minimum and maximum intensities
+Mat draw;
+sobelx.convertTo(draw, CV_8U, 255.0/(maxVal - minVal), -minVal * 255.0/(maxVal - minVal));
+namedWindow("image", WINDOW_AUTOSIZE);
+imshow("image", draw);
+waitKey();
+```
+
+### 使用OpenCV叠加图像
+
+#### 目标
+
+本节将要了解：
+
+- 什么是线性叠加，为什么要用它？
+- 如何使用`addWeighted()`叠加两个图像
+
+#### 理论
+
+> 注意
+>   下面的解释来自Richard Szeliski的书《计算机视觉：算法和应用》(Computer Vision: Algorithm and Applications)。
+
+在之前的章节，我们已经知道了一些像素算子。接下来看一个有趣的二元算子——线性叠加算子：
+
+$$
+g(x) = (1-\alpha)f_0(x) + \alpha f_1(x)
+$$
+
+使用这个算子，通过令$\alpha$从$0\rightarrow1$变化，就可以在两个图像或视频间产生交叉溶解（cross-dissolve）的效果。
+
+#### 源码
+
+```C++
+#include "opencv2/imgcodecs.hpp"
+#include "opencv2/highgui.hpp"
+#include <iostream>
+ 
+using namespace cv;
+ 
+// we're NOT "using namespace std;" here, to avoid collisions between the beta variable and std::beta in c++17
+using std::cin;
+using std::cout;
+using std::endl;
+ 
+int main( void )
+{
+   double alpha = 0.5; double beta; double input;
+ 
+   Mat src1, src2, dst;
+ 
+   cout << " Simple Linear Blender " << endl;
+   cout << "-----------------------" << endl;
+   cout << "* Enter alpha [0.0-1.0]: ";
+   cin >> input;
+ 
+   // We use the alpha provided by the user if it is between 0 and 1
+   if( input >= 0 && input <= 1 )
+     { alpha = input; }
+ 
+   src1 = imread( samples::findFile("LinuxLogo.jpg") );
+   src2 = imread( samples::findFile("WindowsLogo.jpg") );
+ 
+   if( src1.empty() ) { cout << "Error loading src1" << endl; return EXIT_FAILURE; }
+   if( src2.empty() ) { cout << "Error loading src2" << endl; return EXIT_FAILURE; }
+ 
+   beta = ( 1.0 - alpha );
+   addWeighted( src1, alpha, src2, beta, 0.0, dst);
+ 
+   imshow( "Linear Blend", dst );
+   waitKey(0);
+ 
+   return 0;
+}
+```
+
+### 调整图像对比度和亮度
+
+#### 目标
+
+在本节中，你将了解到：
+- 怎样获取像素值
+- 怎样初始化矩阵
+- `cv:saturate_cast`是什么，有什么用
+- 像素变换
+- 调整图像亮度
+
+#### 理论
+
+##### 图像处理
+
+- 图像处理算子即函数，它将一个或多个输入图像进行处理，得到一个输出图像
+- 图像变换可以分为两种算子
+  - 点算子（像素变换）
+  - 邻域（区域）算子
+
+##### 像素变换
+
+- 对于这种图像处理变换，每一个输出像素值只取决于对应输入像素值（另外，也可能有一些全局参数）。
+- 这种算子有亮度/对比度调整、色彩校正和变换。
+
+#### 亮度和对比度调整
+
+- 对于一个像素点，两个基本的操作就是乘法和加法：
+$$
+g(x)=\alpha f(x) + \beta
+$$
+- 参数$\alpha > 0$和$\beta$通常被叫做增益和偏置，有时也会说这两个参数分别控制对比度和亮度。
+- 可以把$f(x)$看作原图像，$g(x)$看作输出图像，那么就有一个更直观的表达方式：
+$$
+g(i,j) = \alpha \cdot f(i,j) + \beta
+$$
+其中$i$和$j$分别代表像素的行和列索引。
+
+#### 代码
+
+```C++
+#include "opencv2/imgcodecs.hpp"
+#include "opencv2/highgui.hpp"
+#include <iostream>
+ 
+// we're NOT "using namespace std;" here, to avoid collisions between the beta variable and std::beta in c++17
+using std::cin;
+using std::cout;
+using std::endl;
+using namespace cv;
+ 
+int main( int argc, char** argv )
+{
+    CommandLineParser parser( argc, argv, "{@input | lena.jpg | input image}" );
+    Mat image = imread( samples::findFile( parser.get<String>( "@input" ) ) );
+    if( image.empty() )
+    {
+      cout << "Could not open or find the image!\n" << endl;
+      cout << "Usage: " << argv[0] << " <Input image>" << endl;
+      return -1;
+    }
+ 
+    Mat new_image = Mat::zeros( image.size(), image.type() );
+ 
+    double alpha = 1.0; /*< Simple contrast control */
+    int beta = 0;       /*< Simple brightness control */
+ 
+    cout << " Basic Linear Transforms " << endl;
+    cout << "-------------------------" << endl;
+    cout << "* Enter the alpha value [1.0-3.0]: "; cin >> alpha;
+    cout << "* Enter the beta value [0-100]: ";    cin >> beta;
+ 
+    for( int y = 0; y < image.rows; y++ ) {
+        for( int x = 0; x < image.cols; x++ ) {
+            for( int c = 0; c < image.channels(); c++ ) {
+                new_image.at<Vec3b>(y,x)[c] =
+                  saturate_cast<uchar>( alpha*image.at<Vec3b>(y,x)[c] + beta );
+            }
+        }
+    }
+ 
+    imshow("Original Image", image);
+    imshow("New Image", new_image);
+ 
+    waitKey();
+    return 0;
+}
+```
+
+#### 解释
+
+- 因为$\alpha \cdot f(i,j) + \beta$的值有可能超出范围或者非整数，所以我们用`cv::saturate_cast`来确保值有效。
+
+除了使用`for`循环来获取每个像素，我们还可以使用更简单快速的命令：
+
+```C++
+image.convertTo(new_image, -1, alpha, beta);
+```
+
+#### 实际例子
+
+在本节，我们将把学到的应用到实践中，通过调整图像亮度和对比度来校正曝光不足的图像。我们也将了解另一种校正图像亮度的技术——伽马校正。
+
+##### 亮度和对比度调整
+
+增加/减少$\beta$值会提高/降低每个像素的值。像素值超过[0:255]范围的将会被赋值为边界值（小于0，赋值0；大于255，赋值255）。
+
+![直方图](imgs/OpenCV%20学习笔记.md/2024-09-05-10-48-35.png)
+
+直方图表示每个色阶的像素数量。较暗的图像会有更多的像素位于低色值，因此直方图在这个区域会显现出高峰。偏置值增大，直方图会向右移动，因为我们是对所有像素都加上偏置值。
+
+参数$\alpha$调整色阶的扩展程度。如果$\alpha<1$，色阶会被压缩，图像对比度会降低。
+
+![直方图](imgs/OpenCV%20学习笔记.md/2024-09-05-10-58-48.png)
+
+调整$\beta$偏置值会提高亮度，但是同时图像会出现一层薄雾，因为对比度降低了。$\alpha$增益可以用来减弱这种影响，但是由于值溢出截取的原因，在原本明亮区域会失去一些细节。
+
+##### 伽马校正
+
+伽马校正可以用来校正亮度，这是通过在输入和映射输出之间的非线性变换实现的：
+
+$$
+O = \left( \frac{I}{255} \right)^{\gamma} \times 255
+$$
+
+因为这个关系不是非线性的，所以效果在不同像素上会不一样，取决于像素的原始值。
+
+![](imgs/OpenCV%20学习笔记.md/2024-09-06-10-56-23.png)
+
+当$\gamma < 1$时，原本较暗区域会变亮，直方图右移。$\gamma > 1$则相反。
+
+##### 校正曝光不足的图像
+
+下图经过曝光和对比度调整$\alpha=1.3$$\beta=40$。
+
+![](imgs/OpenCV%20学习笔记.md/2024-09-06-15-07-37.png)
+
+整体的亮度都被提高了，但是云彩过于饱和，大部分细节都丢失了。
+
+下图使用伽马校正，$\gamma=0.4$。
+
+![](imgs/OpenCV%20学习笔记.md/2024-09-06-15-10-08.png)
+
+伽马校正引起的饱和问题要少很多，因为映射是非线性的，不存在前面方法的问题。
+
+![](imgs/OpenCV%20学习笔记.md/2024-09-06-15-14-10.png)
+
+上图比较了三幅图像的直方图。我们注意到，在原图中，大部分像素值集中在较低的部分。经过$\alpha$$\beta$调整，可以看到，在255处有一个明显的峰值，这是灰度值饱和还有向右的偏移造成的。伽马校正之后，直方图右移了，但是阴影区域的像素移动得要比明亮区域移动得多。
+
+##### 代码
+
+```C++
+Mat lookUpTable(1, 256, CV_8U);
+uchar* p = lookUpTable.ptr();
+for( int i = 0; i < 256; ++i)
+    p[i] = saturate_cast<uchar>(pow(i / 255.0, gamma_) * 255.0);
+
+Mat res = img.clone();
+LUT(img, lookUpTable, res);
+```
+
+### 离散傅里叶变换
+
+通过本节，我们将回答一下几个问题：
+
+- 什么是傅里叶变换？如何使用它？
+- 在OpenCV中如何操作？
+- 一些函数的使用，如：`copyMakeBorder()` , `merge()` , `dft()` , `getOptimalDFTSize()` , `log()` 和 `normalize()` 。
+
+#### 源代码
+
+可以在[这里](https://raw.githubusercontent.com/opencv/opencv/4.x/samples/cpp/tutorial_code/core/discrete_fourier_transform/discrete_fourier_transform.cpp)下载，或在OpenCV源代码库中找到：`samples/cpp/tutorial_code/core/discrete_fourier_transform/discrete_fourier_transform.cpp`。
+
+一个`dft()`的应用示例：
+
+```C++
+#include "opencv2/core.hpp"
+#include "opencv2/imgproc.hpp"
+#include "opencv2/imgcodecs.hpp"
+#include "opencv2/highgui.hpp"
+ 
+#include <iostream>
+ 
+using namespace cv;
+using namespace std;
+ 
+static void help(char ** argv)
+{
+    cout << endl
+        <<  "This program demonstrated the use of the discrete Fourier transform (DFT). " << endl
+        <<  "The dft of an image is taken and it's power spectrum is displayed."  << endl << endl
+        <<  "Usage:"                                                                      << endl
+        << argv[0] << " [image_name -- default lena.jpg]" << endl << endl;
+}
+ 
+int main(int argc, char ** argv)
+{
+    help(argv);
+ 
+    const char* filename = argc >=2 ? argv[1] : "lena.jpg";
+ 
+    Mat I = imread( samples::findFile( filename ), IMREAD_GRAYSCALE);
+    if( I.empty()){
+        cout << "Error opening image" << endl;
+        return EXIT_FAILURE;
+    }
+ 
+    Mat padded;                            //expand input image to optimal size
+    int m = getOptimalDFTSize( I.rows );
+    int n = getOptimalDFTSize( I.cols ); // on the border add zero values
+    copyMakeBorder(I, padded, 0, m - I.rows, 0, n - I.cols, BORDER_CONSTANT, Scalar::all(0));
+ 
+    Mat planes[] = {Mat_<float>(padded), Mat::zeros(padded.size(), CV_32F)};
+    Mat complexI;
+    merge(planes, 2, complexI);         // Add to the expanded another plane with zeros
+ 
+    dft(complexI, complexI);            // this way the result may fit in the source matrix
+ 
+    // compute the magnitude and switch to logarithmic scale
+    // => log(1 + sqrt(Re(DFT(I))^2 + Im(DFT(I))^2))
+    split(complexI, planes);                   // planes[0] = Re(DFT(I), planes[1] = Im(DFT(I))
+    magnitude(planes[0], planes[1], planes[0]);// planes[0] = magnitude
+    Mat magI = planes[0];
+ 
+    magI += Scalar::all(1);                    // switch to logarithmic scale
+    log(magI, magI);
+ 
+    // crop the spectrum, if it has an odd number of rows or columns
+    magI = magI(Rect(0, 0, magI.cols & -2, magI.rows & -2));
+ 
+    // rearrange the quadrants of Fourier image  so that the origin is at the image center
+    int cx = magI.cols/2;
+    int cy = magI.rows/2;
+ 
+    Mat q0(magI, Rect(0, 0, cx, cy));   // Top-Left - Create a ROI per quadrant
+    Mat q1(magI, Rect(cx, 0, cx, cy));  // Top-Right
+    Mat q2(magI, Rect(0, cy, cx, cy));  // Bottom-Left
+    Mat q3(magI, Rect(cx, cy, cx, cy)); // Bottom-Right
+ 
+    Mat tmp;                           // swap quadrants (Top-Left with Bottom-Right)
+    q0.copyTo(tmp);
+    q3.copyTo(q0);
+    tmp.copyTo(q3);
+ 
+    q1.copyTo(tmp);                    // swap quadrant (Top-Right with Bottom-Left)
+    q2.copyTo(q1);
+    tmp.copyTo(q2);
+ 
+    normalize(magI, magI, 0, 1, NORM_MINMAX); // Transform the matrix with float values into a
+                                            // viewable image form (float between values 0 and 1).
+ 
+    imshow("Input Image"       , I   );    // Show the result
+    imshow("spectrum magnitude", magI);
+    waitKey();
+ 
+    return EXIT_SUCCESS;
+}
+```
+
+#### 解释
+
+傅里叶变换会将图像分解成正弦和余弦分量。换句话说，它会将图像从空间域转换到频率域。这个理念是，任何函数都可以用无穷多个正弦和余弦函数的和来精确近似。傅里叶变换就是实现这个过程的一种方法。二维图像的数学表示：
+
+$$
+F(k,l) = \displaystyle\sum\limits_{i=0}^{N-1}\sum\limits_{j=0}^{N-1} f(i,j)e^{-i2\pi(\frac{ki}{N}+\frac{lj}{N})} \\ 
+e^{ix} = \cos{x} + i\sin {x}
+$$
+
+$f$是图像在空间域的值，$F$是图像在频率域的值。变换的结果是复数，我们可以通过实像和复像或者通过幅度图和相位图来显示这一结果。然而，在整个图像处理算法中，我们只对幅度图感兴趣，因为它包含了我们所需的关于图像几何结构的所有信息。然而，如果打算在这些形式下对图像进行一些修改，然后再重新转换，就需要同时保留这两者。
+
+示例展示了如何计算并显示傅里叶变换的幅度图。数字图像是离散的，这意味着它们的取值来自某个特定的数值范围。例如，基本的灰度图像中的值通常在0到255之间。因此，傅里叶变换也需要是离散的，也就是离散傅里叶变换（DFT）。每当你需要从几何的角度来确定图像的结构时，就可以使用这个方法。
+
+以下是要遵循的步骤：
+
+##### 展开图像至最佳尺寸
+
+DFT的性能依赖于图像尺寸。对于尺寸是2、3和5的倍数的图像，DFT通常是最快的。因此，为了达到最佳性能，通常可以通过在图像周围填充边界值来获得这样的尺寸。`getOptimalDFTSize()`函数可以返回这个最佳大小，而我们可以使用`copyMakeBorder()`函数来扩展图像的边界（附加的像素会初始化为零）。
+
+##### 开辟内存控件
+
+傅里叶变换的结果是复数。这意味着对于图像的每个值，结果都有两个分量值对应。此外，频域的范围远大于其空间域。因此，我们通常至少以浮点格式存储这些值。因此，我们将把输入图像转换为这种类型，并扩展一个通道来保存复数值。
+
+##### 进行离散傅里叶变换
+
+##### 实数值和虚数值转换为幅度
+
+复数由实部（Re）和虚部（Im）组成。离散傅里叶变换（DFT）的结果是复数。DFT的幅度是：
+
+$$
+M = \sqrt[2]{ {Re(DFT(I))}^2 + {Im(DFT(I))}^2}
+$$
+
+##### 切换至对数尺度
+
+结果是傅里叶系数的动态范围太大，无法在屏幕上显示。我们有一些小值和一些变化大的高值，但这样我们无法观察到。因此，高值都会显示为白点，而小值则显示为黑点。为了使用灰度值进行可视化，我们可以将线性刻度转换为对数刻度：
+
+$$
+M_1 = \log{(1 + M)}
+$$
+
+##### 裁剪和重排列
+
+我们在第一步时扩展了图像，现在需要把这部分裁剪掉。为了方便查看，我们还需要把图像四个角重新排列，这样原点正好对应图像中心。
+
+##### 标准化
+
+同样为了方便显示，我们使用`cv::normalize()`把幅度值标准化到[0,1]范围内。
+
+#### 结论
+
+一个应用思路是确定图像中呈现的几何方向。例如，看看图像中文本是否水平？观察一些文本可以发现，对于一行文字，它的形式是水平的，而字母的形式是垂直的。在傅里叶变换的情况下，也可以看到文本片段的这两个主要组成部分。
+
+水平文本的情况：
+
+![](imgs/OpenCV%20学习笔记.md/2024-09-06-17-45-40.png)
+
+旋转文本的情况：
+
+![](imgs/OpenCV%20学习笔记.md/2024-09-06-17-46-39.png)
+
+可以看到，频域最具影响力的分量(幅度图像上最亮的点)遵循图像上物体的几何旋转。由此，我们可以计算偏移量并执行图像旋转以纠正最终未对准的偏转量。
 
 
 # 参考资料
