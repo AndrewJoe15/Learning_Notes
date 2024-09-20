@@ -1172,6 +1172,264 @@ $$
 
 可以看到，频域最具影响力的分量(幅度图像上最亮的点)遵循图像上物体的几何旋转。由此，我们可以计算偏移量并执行图像旋转以纠正最终未对准的偏转量。
 
+### 使用 XML 和 YAML 作为输入和输出文件
+
+#### 目标
+
+通过本节，我们将了解：
+
+- 如何使用`YAML`或`XML`文件打印\读取文本条目到文件\OpenCV？
+- 如何对OpenCV的数据结构做同样的事？
+- 如何对自己的数据结构做同样的事？
+- OpenCV数据结构如 `cv::FileStorage` `cv::FileNode` `cv::FileNodeIterator` 的使用。
+
+#### 源代码
+
+可以在[这里](https://github.com/opencv/opencv/tree/4.x/samples/cpp/tutorial_code/core/file_input_output/file_input_output.cpp)下载，或在OpenCV源代码库中找到：`samples/cpp/tutorial_code/core/file_input_output/file_input_output.cpp`。
+
+下面是一段示例代码，说明如何实现目标列表中列出的所有内容。
+
+```C++
+#include <opencv2/core.hpp>
+#include <iostream>
+#include <string>
+ 
+using namespace cv;
+using namespace std;
+ 
+static void help(char** av)
+{
+    cout << endl
+        << av[0] << " shows the usage of the OpenCV serialization functionality."         << endl
+        << "usage: "                                                                      << endl
+        <<  av[0] << " outputfile.yml.gz"                                                 << endl
+        << "The output file may be either XML (xml) or YAML (yml/yaml). You can even compress it by "
+        << "specifying this in its extension like xml.gz yaml.gz etc... "                  << endl
+        << "With FileStorage you can serialize objects in OpenCV by using the << and >> operators" << endl
+        << "For example: - create a class and have it serialized"                         << endl
+        << "             - use it to read and write matrices."                            << endl;
+}
+ 
+class MyData
+{
+public:
+    MyData() : A(0), X(0), id()
+    {}
+    explicit MyData(int) : A(97), X(CV_PI), id("mydata1234") // explicit to avoid implicit conversion
+    {}
+    void write(FileStorage& fs) const                        //Write serialization for this class
+    {
+        fs << "{" << "A" << A << "X" << X << "id" << id << "}";
+    }
+    void read(const FileNode& node)                          //Read serialization for this class
+    {
+        A = (int)node["A"];
+        X = (double)node["X"];
+        id = (string)node["id"];
+    }
+public:   // Data Members
+    int A;
+    double X;
+    string id;
+};
+ 
+//These write and read functions must be defined for the serialization in FileStorage to work
+static void write(FileStorage& fs, const std::string&, const MyData& x)
+{
+    x.write(fs);
+}
+static void read(const FileNode& node, MyData& x, const MyData& default_value = MyData()){
+    if(node.empty())
+        x = default_value;
+    else
+        x.read(node);
+}
+ 
+// This function will print our custom class to the console
+static ostream& operator<<(ostream& out, const MyData& m)
+{
+    out << "{ id = " << m.id << ", ";
+    out << "X = " << m.X << ", ";
+    out << "A = " << m.A << "}";
+    return out;
+}
+ 
+int main(int ac, char** av)
+{
+    if (ac != 2)
+    {
+        help(av);
+        return 1;
+    }
+ 
+    string filename = av[1];
+    { //write
+        Mat R = Mat_<uchar>::eye(3, 3),
+            T = Mat_<double>::zeros(3, 1);
+        MyData m(1);
+ 
+        FileStorage fs(filename, FileStorage::WRITE);
+        // or:
+        // FileStorage fs;
+        // fs.open(filename, FileStorage::WRITE);
+ 
+        fs << "iterationNr" << 100;
+        fs << "strings" << "[";                              // text - string sequence
+        fs << "image1.jpg" << "Awesomeness" << "../data/baboon.jpg";
+        fs << "]";                                           // close sequence
+ 
+        fs << "Mapping";                              // text - mapping
+        fs << "{" << "One" << 1;
+        fs <<        "Two" << 2 << "}";
+ 
+        fs << "R" << R;                                      // cv::Mat
+        fs << "T" << T;
+ 
+        fs << "MyData" << m;                                // your own data structures
+ 
+        fs.release();                                       // explicit close
+        cout << "Write Done." << endl;
+    }
+ 
+    {//read
+        cout << endl << "Reading: " << endl;
+        FileStorage fs;
+        fs.open(filename, FileStorage::READ);
+ 
+        int itNr;
+        //fs["iterationNr"] >> itNr;
+        itNr = (int) fs["iterationNr"];
+        cout << itNr;
+        if (!fs.isOpened())
+        {
+            cerr << "Failed to open " << filename << endl;
+            help(av);
+            return 1;
+        }
+ 
+        FileNode n = fs["strings"];                         // Read string sequence - Get node
+        if (n.type() != FileNode::SEQ)
+        {
+            cerr << "strings is not a sequence! FAIL" << endl;
+            return 1;
+        }
+ 
+        FileNodeIterator it = n.begin(), it_end = n.end(); // Go through the node
+        for (; it != it_end; ++it)
+            cout << (string)*it << endl;
+ 
+ 
+        n = fs["Mapping"];                                // Read mappings from a sequence
+        cout << "Two  " << (int)(n["Two"]) << "; ";
+        cout << "One  " << (int)(n["One"]) << endl << endl;
+ 
+ 
+        MyData m;
+        Mat R, T;
+ 
+        fs["R"] >> R;                                      // Read cv::Mat
+        fs["T"] >> T;
+        fs["MyData"] >> m;                                 // Read your own structure_
+ 
+        cout << endl
+            << "R = " << R << endl;
+        cout << "T = " << T << endl << endl;
+        cout << "MyData = " << endl << m << endl << endl;
+ 
+        //Show default behavior for non existing nodes
+        cout << "Attempt to read NonExisting (should initialize the data structure with its default).";
+        fs["NonExisting"] >> m;
+        cout << endl << "NonExisting = " << endl << m << endl;
+    }
+ 
+    cout << endl
+        << "Tip: Open up " << filename << " with a text editor to see the serialized data." << endl;
+ 
+    return 0;
+}
+```
+
+#### 结果
+
+XML:
+
+```XML
+<?xml version="1.0"?>
+<opencv_storage>
+<iterationNr>100</iterationNr>
+<strings>
+  image1.jpg Awesomeness baboon.jpg</strings>
+<Mapping>
+  <One>1</One>
+  <Two>2</Two></Mapping>
+<R type_id="opencv-matrix">
+  <rows>3</rows>
+  <cols>3</cols>
+  <dt>u</dt>
+  <data>
+    1 0 0 0 1 0 0 0 1</data></R>
+<T type_id="opencv-matrix">
+  <rows>3</rows>
+  <cols>1</cols>
+  <dt>d</dt>
+  <data>
+    0. 0. 0.</data></T>
+<MyData>
+  <A>97</A>
+  <X>3.1415926535897931e+000</X>
+  <id>mydata1234</id></MyData>
+</opencv_storage>
+```
+
+YAML:
+
+```YAML
+%YAML:1.0
+iterationNr: 100
+strings:
+   - "image1.jpg"
+   - Awesomeness
+   - "baboon.jpg"
+Mapping:
+   One: 1
+   Two: 2
+R: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: u
+   data: [ 1, 0, 0, 0, 1, 0, 0, 0, 1 ]
+T: !!opencv-matrix
+   rows: 3
+   cols: 1
+   dt: d
+   data: [ 0., 0., 0. ]
+MyData:
+   A: 97
+   X: 3.1415926535897931e+000
+   id: mydata1234
+```
+
+### 使用 `parallel_for_` 并行化代码
+
+#### 目标
+
+本节将介绍OpenCV`parallel_for_`框架的用法，轻松实现代码的并行执行。为了解释这一概念，我们将写一段代码来执行图像的卷积操作。
+
+#### 预备内容
+
+##### 并行执行框架
+
+首先要有支持并行框架的OpenCV。在OpenCV 4.5中，有下面这些框架：
+
+- Intel 线程构建块（第三方库，需显式激活）
+- OpenMP（编译器继承，需显式激活）
+- APPLE GCD（系统范围内，自动使用（仅限苹果））
+- Windows 并发（运行时的一部分，自动使用（仅限 Windows - MSVC++ >= 10））
+- Pthreads
+
+第三方库需要在编译前在CMake中显式激活。
+
+
 
 # 参考资料
 - [OpenCV官方教程](https://docs.opencv.org/4.x/d9/df8/tutorial_root.html)
