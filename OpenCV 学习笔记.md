@@ -1429,7 +1429,314 @@ MyData:
 
 第三方库需要在编译前在CMake中显式激活。
 
+## 图像处理
 
+### 基本绘制
+
+#### 目标
+
+本节我们将学习如何：
+
+- 使用`line()`函数画线
+- 使用`ellipse()`函数画椭圆
+- 使用`rectangle()`函数画矩形
+- 使用`circle()`函数画圆
+- 使用`fillPoly()`函数填充多边形
+
+#### OpenCV 相关理论
+
+在本节教程中，我们会多次使用两种结构体：`cv:Point`和`cv:Scalar`。
+
+##### Point
+
+`Point`代表二维平面上的点，由图像的$x$和$y$坐标指定。
+
+```C++
+Point pt;
+pt.x = 10;
+pt.y = 8;
+```
+
+或
+
+```C++
+Point pt = Point(10, 8);
+```
+
+##### Scalar
+
+- 代表4元素向量。在OpenCV中，Scalar类型通常用于传递像素值。
+- 这本节中，我们用该类型的变量表示BGR颜色的灰度值（三个参数）。第四个参数我们不用所以不需要指定它。
+- 例如：
+  ```C++
+  Scalar( a, b, c )
+  ```
+
+#### 代码
+
+```C++
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
+ 
+#define w 400
+ 
+using namespace cv;
+ 
+void MyEllipse( Mat img, double angle );
+void MyFilledCircle( Mat img, Point center );
+void MyPolygon( Mat img );
+void MyLine( Mat img, Point start, Point end );
+ 
+int main( void ){
+ 
+ char atom_window[] = "Drawing 1: Atom";
+ char rook_window[] = "Drawing 2: Rook";
+ 
+ Mat atom_image = Mat::zeros( w, w, CV_8UC3 );
+ Mat rook_image = Mat::zeros( w, w, CV_8UC3 );
+ 
+ 
+ MyEllipse( atom_image, 90 );
+ MyEllipse( atom_image, 0 );
+ MyEllipse( atom_image, 45 );
+ MyEllipse( atom_image, -45 );
+ 
+ MyFilledCircle( atom_image, Point( w/2, w/2) );
+ 
+ 
+ MyPolygon( rook_image );
+ 
+ rectangle( rook_image,
+ Point( 0, 7*w/8 ),
+ Point( w, w),
+ Scalar( 0, 255, 255 ),
+ FILLED,
+ LINE_8 );
+ 
+ MyLine( rook_image, Point( 0, 15*w/16 ), Point( w, 15*w/16 ) );
+ MyLine( rook_image, Point( w/4, 7*w/8 ), Point( w/4, w ) );
+ MyLine( rook_image, Point( w/2, 7*w/8 ), Point( w/2, w ) );
+ MyLine( rook_image, Point( 3*w/4, 7*w/8 ), Point( 3*w/4, w ) );
+ 
+ imshow( atom_window, atom_image );
+ moveWindow( atom_window, 0, 200 );
+ imshow( rook_window, rook_image );
+ moveWindow( rook_window, w, 200 );
+ 
+ waitKey( 0 );
+ return(0);
+}
+ 
+ 
+void MyEllipse( Mat img, double angle )
+{
+ int thickness = 2;
+ int lineType = 8;
+ 
+ ellipse( img,
+ Point( w/2, w/2 ),
+ Size( w/4, w/16 ),
+ angle,
+ 0,
+ 360,
+ Scalar( 255, 0, 0 ),
+ thickness,
+ lineType );
+}
+ 
+void MyFilledCircle( Mat img, Point center )
+{
+ circle( img,
+ center,
+ w/32,
+ Scalar( 0, 0, 255 ),
+ FILLED,
+ LINE_8 );
+}
+ 
+void MyPolygon( Mat img )
+{
+ int lineType = LINE_8;
+ 
+ Point rook_points[1][20];
+ rook_points[0][0] = Point( w/4, 7*w/8 );
+ rook_points[0][1] = Point( 3*w/4, 7*w/8 );
+ rook_points[0][2] = Point( 3*w/4, 13*w/16 );
+ rook_points[0][3] = Point( 11*w/16, 13*w/16 );
+ rook_points[0][4] = Point( 19*w/32, 3*w/8 );
+ rook_points[0][5] = Point( 3*w/4, 3*w/8 );
+ rook_points[0][6] = Point( 3*w/4, w/8 );
+ rook_points[0][7] = Point( 26*w/40, w/8 );
+ rook_points[0][8] = Point( 26*w/40, w/4 );
+ rook_points[0][9] = Point( 22*w/40, w/4 );
+ rook_points[0][10] = Point( 22*w/40, w/8 );
+ rook_points[0][11] = Point( 18*w/40, w/8 );
+ rook_points[0][12] = Point( 18*w/40, w/4 );
+ rook_points[0][13] = Point( 14*w/40, w/4 );
+ rook_points[0][14] = Point( 14*w/40, w/8 );
+ rook_points[0][15] = Point( w/4, w/8 );
+ rook_points[0][16] = Point( w/4, 3*w/8 );
+ rook_points[0][17] = Point( 13*w/32, 3*w/8 );
+ rook_points[0][18] = Point( 5*w/16, 13*w/16 );
+ rook_points[0][19] = Point( w/4, 13*w/16 );
+ 
+ const Point* ppt[1] = { rook_points[0] };
+ int npt[] = { 20 };
+ 
+ fillPoly( img,
+ ppt,
+ npt,
+ 1,
+ Scalar( 255, 255, 255 ),
+ lineType );
+}
+ 
+void MyLine( Mat img, Point start, Point end )
+{
+ int thickness = 2;
+ int lineType = LINE_8;
+ 
+ line( img,
+ start,
+ end,
+ Scalar( 0, 0, 0 ),
+ thickness,
+ lineType );
+}
+```
+
+#### 解释
+
+我们计划绘制两个例子，一个是原子示意图，一个是国际象棋的车，所以我们需要创建两幅图像和两个显示图像的窗口。
+
+```C++
+  char atom_window[] = "Drawing 1: Atom";
+  char rook_window[] = "Drawing 2: Rook";
+ 
+  Mat atom_image = Mat::zeros( w, w, CV_8UC3 );
+  Mat rook_image = Mat::zeros( w, w, CV_8UC3 );
+```
+
+……
+
+#### 结果
+
+![](imgs/OpenCV%20学习笔记.md/2024-10-30-21-42-35.png)
+
+### 随机生成器和OpenCV文本
+
+#### 目标
+
+在本节中，我们将学习如何：
+
+- 使用*Random Number generator*（`cv:RNG`）类，以及如何从均匀分布中获取一个随机数。
+- 使用`cv:putText`函数在OpenCV窗口中显示文本。
+
+#### 代码
+
+- 在前一节中，我们通过给定一些输入参数（如坐标、颜色、粗度等）绘制了各种各样的几何图形。
+- 在本节中，我们尝试使用随机数值作为绘制参数。
+
+### Smoothing Images
+
+#### 目标
+
+在本节教程中，我们将学习如何应用不同的线性滤波器来平滑图像，用到的OpenCV函数有下面几个：
+- `blur()`
+- `GaussionBlur()`
+- `medianBlur()`
+- `bilateralFilter()`
+
+#### 理论
+
+> 注意
+> > 下面的解释来自Richard Szeliski和LearningOpenCV的《计算机视觉：算法和应用》一书。
+
+- 平滑，也称为模糊，是一种简单而常用的图像处理操作。
+- 平滑的原因有许多。在本教程中，我们将重点关注为了减少噪声而进行的平滑（其他用途将在后续教程中看到）。
+- 线性滤波：
+  $$
+g(i,j) = \sum_{k,l} f(i+k, j+l) h(k,l)
+  $$
+  $h(k,l)$称为卷积核，它是滤波器系数。
+- 有许多中滤波器，最常用的有：
+
+##### 归一化块滤波器
+
+- 最简单的滤波器。每个输出像素是其内核领域像素的平均值（所有邻域像素贡献的权重相等）
+- 其核函数如下：
+  $$
+K = \dfrac{1}{K_{width} \cdot K_{height}} \begin{bmatrix}
+        1 & 1 & 1 & ... & 1 \\
+        1 & 1 & 1 & ... & 1 \\
+        . & . & . & ... & 1 \\
+        . & . & . & ... & 1 \\
+        1 & 1 & 1 & ... & 1
+       \end{bmatrix}
+  $$
+- 代码
+  ```CPP
+  void cv::blur	(
+    InputArray src, // 输入数据；可以是任意通道数，独立处理；像素类型必须是CV_8U, CV_16U, CV_16S, CV_32F 或 CV_64F
+    OutputArray dst,// 输出数据
+    Size ksize,     // 核尺寸
+    Point anchor = Point(-1,-1), // 锚点 默认核中心（-1，-1）
+    int borderType = BORDER_DEFAULT // 图像外边缘填充模式，默认镜像  gfedcb|abcdefgh|gfedcba
+    )	
+  ```
+
+##### 高斯滤波器
+
+- 或许是最有用的滤波器（尽管不是最快的）。高斯滤波是通过将输入数组中的每个点与高斯核进行卷积，然后将它们全部求和以产生输出数组来完成的。
+- 2D 高速函数可以表示为
+  $$
+G_{0}(x, y) = A  e^{ \dfrac{ -(x - \mu_{x})^{2} }{ 2\sigma^{2}_{x} } +  \dfrac{ -(y - \mu_{y})^{2} }{ 2\sigma^{2}_{y} } }
+  $$
+  其中$u$为均值，$\sigma^{2}$为方差。
+- 代码
+  ```C++
+  void cv::GaussianBlur (
+    InputArray src,   // 输入数据
+    OutputArray dst,  // 输出数据
+    Size ksize,       // 核尺寸
+    double sigmaX,    // X方向标准差
+    double sigmaY = 0,// Y方向标准差，XY标准差均为0则自动计算
+    int borderType = BORDER_DEFAULT,  // 边缘填充类型
+    AlgorithmHint hint = cv::ALGO_HINT_DEFAULT  // 算法提示，定义一些行为？？？
+    )	
+  ```
+
+
+##### 中值滤波器
+
+中值滤波器遍历信号的每个元素（在本例中是图像），并用相邻像素的中值替换每个像素（位于求值像素周围的正方形邻域中）。
+
+
+- 代码
+  ```C++
+  void cv::medianBlur (
+    InputArray src, // 	input 1-, 3-, or 4-channel image
+    OutputArray dst,
+    int ksize 
+    )	
+  ```
+
+##### 双边滤波器
+
+- 到目前为止，我们已经解释了一些滤波器，其主要目标是平滑输入图像。然而，有时滤波器不仅可以消除噪声，还可以平滑边缘。为了避免这种情况（至少在一定程度上），我们可以使用双边过滤器。
+- 与高斯滤波器类似，双边滤波器也考虑相邻像素，并为每个像素分配权重。这些权重有两个组成部分，其中第一个是高斯滤波器使用的相同权重。第二个分量考虑相邻像素与求值像素之间的强度差异。
+- 代码
+  ```C++
+  void cv::bilateralFilter (
+    InputArray src, // 	Source 8-bit or floating-point, 1-channel or 3-channel image.
+    OutputArray dst,
+    int d,          // 像素领域直径
+    double sigmaColor,  // 颜色空间标准差
+    double sigmaSpace,  // 坐标空间标准差
+    int borderType = BORDER_DEFAULT 
+    )	
+  ```
 
 # 参考资料
 - [OpenCV官方教程](https://docs.opencv.org/4.x/d9/df8/tutorial_root.html)
