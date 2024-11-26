@@ -1738,5 +1738,133 @@ G_{0}(x, y) = A  e^{ \dfrac{ -(x - \mu_{x})^{2} }{ 2\sigma^{2}_{x} } +  \dfrac{ 
     )	
   ```
 
+### 膨胀和腐蚀
+
+#### 目标
+
+- 学会使用两个十分常用的形态学算子：膨胀和腐蚀。
+在OpenCV中的函数为：
+  - `cv::erode`
+  - `cv::dilate`
+
+#### 形态学处理
+
+- 总的来说，就是一系列基于形状的图像处理操作。形态学处理将一个结构元素应用于输入图像并生成输出图像。
+- 最基本的形态学处理：膨胀和腐蚀。他们有很多用处，例如：
+  - 去除噪点
+  - 分离出单个元素；连接分开的元素
+  - 寻找亮度凸块或孔洞
+- 我们使用下面的图片，简单解释一下腐蚀和膨胀
+![](imgs/OpenCV%20学习笔记.md/2024-11-26-15-32-27.png)
+
+##### 膨胀
+
+- 卷积核扫描图像，每个像素取邻域中的最大值，图像中较亮的区域将会“生长”（所以叫膨胀）。
+- 用公式表示：$\texttt{dst} (x,y) =  \max _{(x',y'):  \, \texttt{element} (x',y') \ne0 } \texttt{src} (x+x',y+y')$
+- 上图应用膨胀操作后：
+  ![](imgs/OpenCV%20学习笔记.md/2024-11-26-15-42-00.png)
+- 代码
+  ```C++
+  void Dilation(int, void*)
+  {
+      int dilation_type = 0;
+      if (dilation_elem == 0) { dilation_type = MORPH_RECT; }
+      else if (dilation_elem == 1) { dilation_type = MORPH_CROSS; }
+      else if (dilation_elem == 2) { dilation_type = MORPH_ELLIPSE; }
+
+      Mat element = getStructuringElement(dilation_type,
+          Size(2 * dilation_size + 1, 2 * dilation_size + 1),
+          Point(dilation_size, dilation_size));
+
+      dilate(src, dilation_dst, element);
+      imshow("Dilation Demo", dilation_dst);
+  }
+  ```
+
+##### 腐蚀
+
+- 与膨胀相反，腐蚀计算给定核区域的最小值。
+- 用公式表示：$\texttt{dst} (x,y) =  \min _{(x',y'):  \, \texttt{element} (x',y') \ne0 } \texttt{src} (x+x',y+y')$
+- 同样地，我们将原图进行腐蚀操作，可以发现字母部分变细了。
+  ![](imgs/OpenCV%20学习笔记.md/2024-11-26-15-55-56.png)
+- 代码
+  ```C++
+  void Erosion(int, void*)
+  {
+      int erosion_type = 0;
+      if (erosion_elem == 0) { erosion_type = MORPH_RECT; }
+      else if (erosion_elem == 1) { erosion_type = MORPH_CROSS; }
+      else if (erosion_elem == 2) { erosion_type = MORPH_ELLIPSE; }
+
+      Mat element = getStructuringElement(erosion_type,
+          Size(2 * erosion_size + 1, 2 * erosion_size + 1),
+          Point(erosion_size, erosion_size));
+
+      erode(src, erosion_dst, element);
+      imshow("Erosion Demo", erosion_dst);
+  }
+  ```
+
+### 其他形态学变换
+
+#### 目标
+
+在本章节，你将学习如何：
+- 使用OpenCV函数`cv:morphologyEx`来实现形态学变换，如：
+  - 开运算
+  - 闭运算
+  - 形态学梯度
+  - 顶帽
+  - 黑帽
+
+#### 理论
+
+在前一节，我们介绍了两种基本的形态学操作：膨胀和腐蚀。
+基于这两个操作，我们可以实现更复杂的变换。这里我们简短地讨论OpenCV中提供的五个操作。
+
+##### 开运算
+
+- 先腐蚀后膨胀
+  $$
+  dst = open( src, element) = dilate( erode( src, element ) )
+  $$
+- 可用于去除小元素（假定这些小元素亮于背景）
+- 如下图，在进行开运算后，左边的小颗粒被去除了
+  ![](imgs/OpenCV%20学习笔记.md/2024-11-26-16-45-09.png)
+
+##### 闭运算
+
+- 先膨胀后腐蚀
+  $$
+  dst = close( src, element ) = erode( dilate( src, element ) )
+  $$
+- 用于去除小孔洞
+  ![](imgs/OpenCV%20学习笔记.md/2024-11-26-16-46-43.png)
+
+##### 形态学梯度
+
+- 膨胀与腐蚀的差
+  $$
+  dst = morph_{grad}( src, element ) = dilate( src, element ) - erode( src, element )
+  $$
+- 可用于寻找一个目标的外轮廓
+  ![](imgs/OpenCV%20学习笔记.md/2024-11-26-16-49-11.png)
+
+##### 顶帽
+
+- 图像与其开运算的差
+  $$
+  dst = tophat( src, element ) = src - open( src, element )
+  $$
+  ![](imgs/OpenCV%20学习笔记.md/2024-11-26-16-51-33.png)
+
+##### 黑帽
+
+- 图像闭运算与原图像的差
+  $$
+  dst = blackhat( src, element ) = close( src, element ) - src
+  $$
+  ![](imgs/OpenCV%20学习笔记.md/2024-11-26-17-23-26.png)
+  
 # 参考资料
 - [OpenCV官方教程](https://docs.opencv.org/4.x/d9/df8/tutorial_root.html)
