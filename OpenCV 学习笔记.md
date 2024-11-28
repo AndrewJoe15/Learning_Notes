@@ -2193,5 +2193,103 @@ void cv::adaptiveThreshold (
 - 输出
 - 目标尺寸
 
+### 基本阈值处理
+
+#### 目标
+
+- 使用`cv::threshold`执行基本阈值处理操作
+
+#### 理论
+
+##### 阈值处理
+
+- 最简单的分割方法  
+- 应用示例：将图像中与我们需要分析的对象对应的区域分离出来。这种分离基于对象像素与背景像素之间的强度差异。  
+- 为了将我们感兴趣的像素与其他像素区分开（其他像素最终会被排除），我们会将每个像素的强度值与一个阈值进行比较（阈值根据要解决的问题确定）。  
+- 一旦成功分离出重要像素，我们可以为这些像素设置一个确定的值来标识它们（例如，可以将它们设置为 \(0\)（黑色）、\(255\)（白色）或任何适合需求的值）。
+
+###### 阈值类型
+
+- OpenCV 提供了函数 `cv::threshold` 来执行阈值操作。
+- 我们可以使用此函数实现 5 种类型的阈值处理。接下来的小节将对此进行详细解释。
+- 为了说明这些阈值处理的工作原理，考虑我们有一张源图像，其像素强度值为 \( src(x, y) \)。下面的图示中，水平蓝线表示固定的阈值 \( thresh \)。
+  ![](imgs/OpenCV%20学习笔记.md/2024-11-28-15-57-24.png)
+
+**Threshold Binary**
+
+- 这种阈值处理操作可以表示为：
+  $$
+  dst(x, y)=\left\{\begin{array}{ll}
+  0 & \text { if } \operatorname{src}(x, y)>\text{threshold} \\
+  \operatorname{maxValue} & \text { otherwise }
+  \end{array}\right.
+  $$
+  ![](imgs/OpenCV%20学习笔记.md/2024-11-28-16-00-38.png)
+
+**Threshold Binary, Inverted**
+
+- 这种阈值处理操作可以表示为：
+  $$
+  dst(x, y)=\left\{\begin{array}{ll}
+  0 & \text { if } \operatorname{src}(x, y)>\text{threshold} \\
+  \operatorname{maxValue} & \text { otherwise }
+  \end{array}\right.
+  $$
+  ![](imgs/OpenCV%20学习笔记.md/2024-11-28-16-02-43.png)
+
+**Truncate**
+
+- 这种阈值处理操作可以表示为：
+  $$
+  dst(x, y)=\left\{\begin{array}{ll}
+  \text{threshold} & \text { if } \operatorname{src}(x, y)>\text{threshold} \\
+  \operatorname{src}(x, y) & \text { otherwise }
+  \end{array}\right.
+  $$
+  ![](imgs/OpenCV%20学习笔记.md/2024-11-28-16-05-12.png)
+
+**Threshold to Zero**
+
+- 这种阈值处理操作可以表示为：
+  $$
+  dst(x, y)=\left\{\begin{array}{ll}
+  \operatorname{src}(x, y) & \text { if } \operatorname{src}(x, y)>\text{threshold} \\
+  0 & \text { otherwise }
+  \end{array}\right.
+  $$
+  ![](imgs/OpenCV%20学习笔记.md/2024-11-28-16-07-06.png)
+
+**Threshold to Zero, Inverted**
+
+- 这种阈值处理操作可以表示为：
+  $$
+  dst(x, y)=\left\{\begin{array}{ll}
+  0 & \text { if } \operatorname{src}(x, y)>\text{threshold} \\
+  \operatorname{src}(x, y) & \text { otherwise }
+  \end{array}\right.
+  $$
+  ![](imgs/OpenCV%20学习笔记.md/2024-11-28-16-10-11.png)
+
+#### 代码
+
+```C++
+double cv::threshold(
+  InputArray src,
+  OutputArray dst,
+  double thresh,
+  double maxVal,
+  int type 
+  )	
+```
+
+参数
+
+- `src` 输入，8-bit 或 32-bit 多通道图像
+- `dst` 输出
+- `thresh` 阈值
+- `maxVal` 非零像素值，`THRESH_BINARY`和`THRESH_BINARY_INV`时使用
+- `type`  阈值类型
+
+
 # 参考资料
 - [OpenCV官方教程](https://docs.opencv.org/4.x/d9/df8/tutorial_root.html)
