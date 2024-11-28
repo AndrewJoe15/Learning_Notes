@@ -1865,6 +1865,281 @@ G_{0}(x, y) = A  e^{ \dfrac{ -(x - \mu_{x})^{2} }{ 2\sigma^{2}_{x} } +  \dfrac{ 
   dst = blackhat( src, element ) = close( src, element ) - src
   $$
   ![](imgs/OpenCV%20学习笔记.md/2024-11-26-17-23-26.png)
-  
+
+#### 代码
+
+```C++
+void Morphology_Operations( int, void* )
+{
+  // Since MORPH_X : 2,3,4,5 and 6
+  int operation = morph_operator + 2;
+ 
+  Mat element = getStructuringElement( morph_elem, Size( 2*morph_size + 1, 2*morph_size+1 ), Point( morph_size, morph_size ) );
+ 
+  morphologyEx( src, dst, operation, element );
+  imshow( window_name, dst );
+}
+```
+
+其中关键函数是`cv::morphologyEX`：
+
+```C++
+void cv::morphologyEx ( 
+  InputArray src,
+  OutputArray dst,
+  int op,
+  InputArray kernel,
+  Point anchor = Point(-1,-1),
+  int iterations = 1,
+  int borderType = BORDER_CONSTANT,
+  const Scalar & borderValue = morphologyDefaultBorderValue() 
+  )	
+```
+
+参数：
+- `src`         输入
+- `dst`         输出
+- `op`          操作类型，0-腐蚀 1-膨胀 2-开 3-闭 4-梯度 5-顶帽 6-黑帽 7-Hit-or-Miss
+- `kernel`      结构元素
+- `anchor`      核锚点
+- `iterations`  腐蚀或膨胀的迭代次数
+- `borderType`  边界类型
+- `borderValue` 常量边界时的边界值
+
+> **注意**
+> 迭代次数指的是腐蚀或膨胀执行的次数，例如，迭代次数为1时的开运算：腐蚀->膨胀，迭代次数为2时的开运算：腐蚀->腐蚀->膨胀->膨胀，而不是腐蚀->膨胀->腐蚀->膨胀。
+
+当参数`op`为7时，函数执行的是Hit-or-Miss变换，将在下一节进行介绍。
+
+### Hit-or-Miss
+
+#### 目标
+
+在本教程中，您将学习如何通过使用“命中-未命中变换”（也称为“命中与未命中变换”）在二值图像中找到给定的配置或模式。该变换也是更高级形态学操作（如细化或修剪）的基础。
+
+#### 理论
+
+“命中或未命中变换（Hit-or-Miss transformation）用于在二进制图像中寻找图案。特别是，它找到那些其邻域与第一个结构元素 \( B_1 \) 形状匹配，但同时又不与第二个结构元素 \( B_2 \) 形状匹配的像素。数学上，作用在图像 \( A \) 上的操作可以表达如下：
+$$
+A\circledast B = (A\ominus B_1) \cap (A^c\ominus B_2)
+$$
+
+所以，Hit-or-Miss 操作可以分为三步：
+
+1. 用结构元素$B_1$腐蚀图像$A$
+2. 用结构元素$B_2$腐蚀图像$A$的补集$A^c$
+3. 第一步和第二步的结果取交集
+
+结构元素$B_1$和$B_2$可以合并成一个元素$B$。例如：
+![](imgs/OpenCV%20学习笔记.md/2024-11-27-11-50-28.png)
+
+在这种情况下，我们要查找的图案是：中心像素为背景色，东西南北方向像素为前景色，其他像素任意。
+
+把这个结构元素应用到下面的图像：
+![](imgs/OpenCV%20学习笔记.md/2024-11-27-11-54-34.png)
+得到结果：
+![](imgs/OpenCV%20学习笔记.md/2024-11-27-11-55-04.png)
+
+### 提取水平和垂直线
+
+#### 目标
+
+在本教程中，您将学习如何：
+
+- 应用两个非常常见的形态学操作（即膨胀和腐蚀），通过创建自定义内核，以提取水平轴和垂直轴上的直线。
+
+#### 理论
+
+##### 形态学处理
+
+形态学是一组图像处理操作，这些操作基于预定义的结构元素（也称为内核）对图像进行处理。输出图像中每个像素的值是通过将输入图像中相应像素与其邻域进行比较得出的。通过选择内核的大小和形状，可以构建一种形态学操作，使其对输入图像中特定的形状更为敏感。
+
+最基本的两种形态学操作是膨胀和腐蚀。膨胀操作向图像中物体的边界添加像素，而腐蚀则恰好相反，它去除边界上的像素。添加或去除的像素数量，分别取决于用于处理图像的结构元素的大小和形状。一般来说，这两种操作遵循如下规则：
+
+- **膨胀**：输出像素的值是所有落在结构元素大小和形状范围内的像素值的最大值。例如，在二值图像中，如果输入图像中有任何像素位于内核范围内且其值为1，则输出图像中对应的像素也会被设置为1。这一规则适用于任何类型的图像（如灰度图像、BGR图像等）。
+  - 二值图像膨胀
+    ![](imgs/OpenCV%20学习笔记.md/2024-11-27-16-39-56.png)
+  - 灰度图像膨胀
+    ![](imgs/OpenCV%20学习笔记.md/2024-11-27-16-40-30.png)
+- **腐蚀**：对于腐蚀操作，情况正好相反。输出像素的值是所有落在结构元素大小和形状范围内的像素值中的最小值。请参阅下面的示例图：
+  - 二值图像腐蚀
+    ![](imgs/OpenCV%20学习笔记.md/2024-11-27-16-42-07.png)
+  - 灰度图像腐蚀
+    ![](imgs/OpenCV%20学习笔记.md/2024-11-27-16-42-10.png)
+
+##### 结构元素  
+如上所述，通常在任何形态学操作中，用于探测输入图像的结构元素是最重要的部分。  
+
+结构元素是一个仅由0和1组成的矩阵，可以具有任意的形状和大小。通常，结构元素比待处理的图像小得多，其中值为1的像素定义了邻域范围。结构元素的中心像素被称为“原点”，用于标识感兴趣的像素，即当前正在处理的像素。  
+
+例如，下图展示了一个大小为 7x7 的菱形结构元素：
+![](imgs/OpenCV%20学习笔记.md/2024-11-27-16-45-07.png)
+
+结构元素可以具有多种常见形状，例如直线、菱形、圆盘、周期性直线和圆形，并且可以有不同的大小。通常，您会选择与输入图像中想要处理或提取的目标对象具有相同大小和形状的结构元素。例如，要在图像中找到直线，可以创建一个线性结构元素，稍后您将会看到具体示例。
+
+#### 关键代码
+
+本节示例中，我们将从下图曲谱中提取音符和五线格。
+![](imgs/OpenCV%20学习笔记.md/2024-11-28-13-45-36.png)
+
+代码全文在[这里](https://raw.githubusercontent.com/opencv/opencv/4.x/samples/cpp/tutorial_code/ImgProc/morph_lines_detection/Morphology_3.cpp)
+
+##### 灰度图
+
+```C++
+    // Transform source image to gray if it is not already
+    Mat gray;
+ 
+    if (src.channels() == 3)
+    {
+        cvtColor(src, gray, COLOR_BGR2GRAY);
+    }
+    else
+    {
+        gray = src;
+    }
+```
+
+##### 灰度图转二值图
+
+```C++
+    // Apply adaptiveThreshold at the bitwise_not of gray, notice the ~ symbol
+    Mat bw;
+    adaptiveThreshold(~gray, bw, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY, 15, -2);
+```
+
+这里用到了`cv::adaptiveThreshold`函数：
+
+```C++
+
+void cv::adaptiveThreshold (
+  InputArray src,
+  OutputArray dst,
+  double maxValue,
+  int adaptiveMethod,
+  int thresholdType,
+  int blockSize,
+  double C 
+  )	
+```
+
+这个函数将灰度图像转为二值图像，其原理依照下面的公式：
+- **THRESH_BINARY**
+  $$
+  dst(x, y)=\left\{\begin{array}{ll}
+  \operatorname{maxValue} & \text { if } \operatorname{src}(x, y)>T(x, y) \\
+  0 & \text { otherwise }
+  \end{array}\right.
+  $$
+- **THRESH_BINARY_INV**
+  $$
+  dst(x, y)=\left\{\begin{array}{ll}
+  0 & \text { if } \operatorname{src}(x, y)>T(x, y) \\
+  \operatorname{maxValue} & \text { otherwise }
+  \end{array}\right.
+  $$
+
+其中$T(x,y)$是针对每个像素单独计算出来的阈值（见参数`adaptiveMethod`）。
+
+**参数**
+- `src` 输入图像，8-bit单通道
+- `dst` 输出图像
+- `maxValue`  最大值，即赋给非零像素的值
+- `adaptiveMethod`  自适应阈值算法，包括
+  - 均值法`ADAPTIVE_THRESH_MEAN_C`
+  - 高斯法（邻域加权求平均）`ADAPTIVE_THRESH_GAUSSIAN_C `
+- `thresholdType` 阈值类型，通常选择 `THRESH_BINARY` 或 `THRESH_BINARY_INV`
+- `blockSize` 邻域区域的大小，必须为奇数
+- `C` 常数，用来调节阈值计算的严格程度。即`adaptiveMethod`中需要用到的常数
+
+##### 结构元素
+
+为了提取我们想要的目标对象，我们需要创建一个相应的结构元素。由于我们想要提取水平线，因此用于此目的的结构元素应具有以下形状：
+![](imgs/OpenCV%20学习笔记.md/2024-11-28-13-41-06.png)
+
+在代码中我们是这样实现的：
+
+```C++
+    // Specify size on horizontal axis
+    int horizontal_size = horizontal.cols / 30;
+ 
+    // Create structure element for extracting horizontal lines through morphology operations
+    Mat horizontalStructure = getStructuringElement(MORPH_RECT, Size(horizontal_size, 1));
+ 
+    // Apply morphology operations
+    erode(horizontal, horizontal, horizontalStructure, Point(-1, -1));
+    dilate(horizontal, horizontal, horizontalStructure, Point(-1, -1));
+ 
+    // Show extracted horizontal lines
+    show_wait_destroy("horizontal", horizontal);
+```
+
+得到效果：
+![](imgs/OpenCV%20学习笔记.md/2024-11-28-13-47-27.png)
+
+同样地，针对竖直的线条，我们可以创建相应的结构元素：
+![](imgs/OpenCV%20学习笔记.md/2024-11-28-13-46-49.png)
+
+对应代码：
+```C++
+    // Specify size on vertical axis
+    int vertical_size = vertical.rows / 30;
+ 
+    // Create structure element for extracting vertical lines through morphology operations
+    Mat verticalStructure = getStructuringElement(MORPH_RECT, Size(1, vertical_size));
+ 
+    // Apply morphology operations
+    erode(vertical, vertical, verticalStructure, Point(-1, -1));
+    dilate(vertical, vertical, verticalStructure, Point(-1, -1));
+ 
+    // Show extracted vertical lines
+    show_wait_destroy("vertical", vertical);
+```
+
+得到效果：
+![](imgs/OpenCV%20学习笔记.md/2024-11-28-13-48-15.png)
+
+##### 优化边缘
+
+正如您所见，我们已经接近目标。然而，此时您会注意到音符的边缘有些粗糙。出于这个原因，我们需要对边缘进行优化，以获得更平滑的结果：
+
+```C++
+    // Inverse vertical image
+    bitwise_not(vertical, vertical);
+    show_wait_destroy("vertical_bit", vertical);
+ 
+    // Extract edges and smooth image according to the logic
+    // 1. extract edges
+    // 2. dilate(edges)
+    // 3. src.copyTo(smooth)
+    // 4. blur smooth img
+    // 5. smooth.copyTo(src, edges)
+ 
+    // Step 1
+    Mat edges;
+    adaptiveThreshold(vertical, edges, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY, 3, -2);
+    show_wait_destroy("edges", edges);
+ 
+    // Step 2
+    Mat kernel = Mat::ones(2, 2, CV_8UC1);
+    dilate(edges, edges, kernel);
+    show_wait_destroy("dilate", edges);
+ 
+    // Step 3
+    Mat smooth;
+    vertical.copyTo(smooth);
+ 
+    // Step 4
+    blur(smooth, smooth, Size(2, 2));
+ 
+    // Step 5
+    smooth.copyTo(vertical, edges);
+ 
+    // Show final result
+    show_wait_destroy("smooth - final", vertical);
+```
+
+其中步骤1和2创建膨胀蒙版，步骤3和4平滑图像，步骤5将膨胀蒙版下的平滑图像拷贝到目标图像。
+
 # 参考资料
 - [OpenCV官方教程](https://docs.opencv.org/4.x/d9/df8/tutorial_root.html)
