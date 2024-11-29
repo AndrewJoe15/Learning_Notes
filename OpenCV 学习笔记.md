@@ -2451,6 +2451,102 @@ $$
   borderType: 定义应用的边界类型。对于此示例，可以是 BORDER_CONSTANT（常量边界）或 BORDER_REPLICATE（复制边界）。
   value: 如果 borderType 是 BORDER_CONSTANT，则这是用于填充边界像素的值。
 
+### Sobel 导数
+
+#### 目标
+
+本节教程我们将学习如何：
+
+- 使用 OpenCV 函数 `Sobel()` 来计算图像导数。
+- 使用 OpenCV 函数 `Scharr()` 来计算更精确的图像导数，适用于尺寸为$3\cdot3$的核。
+
+#### 理论
+
+- 在前两节教程中，我们已经看到了卷积的一些应用示例。最重要的卷积之一是计算图像中的导数（或它们的近似值）。
+- 那么，为什么计算图像中的导数会很重要呢？让我们想象一下我们要检测图像中的边缘。比如：
+  ![](imgs/OpenCV%20学习笔记.md/2024-11-29-15-26-16.png)
+
+你可以很容易注意到，在边缘处，像素的强度变化是显著的。表达这种变化的一个好方法是使用**导数**。梯度的剧烈变化表示图像中的一个重大变化。
+
+##### Sobel 算子
+
+- Sobel 算子是一个离散的微分算子，它计算图像强度函数梯度的近似值。  
+- Sobel 算子结合了高斯平滑和微分操作。
+
+##### 格式
+
+- 水平方向
+  $$
+  G_{x} = \begin{bmatrix}
+        -1 & 0 & +1  \\
+        -2 & 0 & +2  \\
+        -1 & 0 & +1
+        \end{bmatrix} * I
+  $$
+- 垂直方向
+  $$
+  G_{x} = \begin{bmatrix}
+        -1 & 0 & +1  \\
+        -2 & 0 & +2  \\
+        -1 & 0 & +1
+        \end{bmatrix} * I
+  $$
+
+在图像的每个点，我们通过结合上述两个结果来计算该点梯度的近似值：
+
+$$
+G = \sqrt{ G_{x}^{2} + G_{y}^{2} }
+$$
+
+有时也会用下面这个更简单的等式：
+
+$$
+G = |G_{x}| + |G_{y}|
+$$
+
+> 注意
+> 当卷积核的大小为 3 时，上述 Sobel 核可能会产生显著的不准确性（毕竟，Sobel 仅是导数的近似）。  
+对于大小为 3 的核，OpenCV 使用 **Scharr()** 函数来解决这一问题。该函数与标准 Sobel 函数一样快速，但精度更高。它使用下面这个核：
+$$
+G_{x} = \begin{bmatrix}
+    -3 & 0 & +3  \\
+    -10 & 0 & +10  \\
+    -3 & 0 & +3
+    \end{bmatrix}
+$$
+
+#### 代码
+
+```C++
+    Mat grad_x, grad_y;
+    Mat abs_grad_x, abs_grad_y;
+ 
+    Sobel(src_gray, grad_x, ddepth, 1, 0, ksize, scale, delta, BORDER_DEFAULT);
+ 
+    Sobel(src_gray, grad_y, ddepth, 0, 1, ksize, scale, delta, BORDER_DEFAULT);
+
+    // converting back to CV_8U
+    convertScaleAbs(grad_x, abs_grad_x);
+    convertScaleAbs(grad_y, abs_grad_y);
+
+    addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, grad);
+```
+
+`Sobel()`参数：
+- `src_gray`：在我们的例子中，输入图像，类型为 CV_8U。
+- `grad_x` / `grad_y`：输出图像。
+- `ddepth`：输出图像的深度，我们将其设置为 CV_16S，以避免溢出。
+- `x_order`：x 方向导数的阶数。
+- `y_order`：y 方向导数的阶数。
+- `scale`、`delta` 和 `BORDER_DEFAULT`：我们使用默认值。
+
+注意，计算 x 方向的梯度时，我们使用：`x_order` = 1 和 `y_order` = 0。对于 y 方向，我们采用类似的方法。
+
+
+
+
+
+
 # 知识点
 
 ## 相关性运算和卷积运算
