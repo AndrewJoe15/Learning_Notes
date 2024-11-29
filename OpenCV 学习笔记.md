@@ -2416,6 +2416,40 @@ $$
   - delta: 在相关性计算过程中要加到每个像素值上的值。默认为 0。
   - BORDER_DEFAULT: 我们将此值保留为默认值（更多细节将在后续教程中介绍）。
 
+### 给图像添加边框
+
+#### 目标
+
+了解使用`copyMakeBorder()`来设置图像边框。
+
+#### 理论
+
+1. 在我们之前的教程中，我们学习了如何使用卷积处理图像。一个自然而然出现的问题是如何处理边界。如果卷积计算点位于图像的边缘，我们该如何处理？
+
+2. 大多数OpenCV函数的做法是将给定图像复制到另一个稍微大一点的图像上，然后自动对边界进行填充（可以使用下面示例代码中解释的任意方法）。这样，卷积可以在需要的像素上顺利进行（额外的填充在操作完成后被去掉）。
+
+3. 在本教程中，我们将简要探讨两种定义图像额外填充（边界）的方法：
+   1. BORDER_CONSTANT：用一个常数值填充图像（例如黑色或0）。
+   2. BORDER_REPLICATE：原始图像最边缘的行或列被复制到额外的边界。
+
+#### 代码
+
+[完整代码](https://raw.githubusercontent.com/opencv/opencv/4.x/samples/cpp/tutorial_code/ImgTrans/copyMakeBorder_demo.cpp)
+
+- 随机颜色
+  ```C++
+  Scalar value( rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255) );
+  ```
+- 生成边框
+  ```C++
+  copyMakeBorder( src, dst, top, bottom, left, right, borderType, value );
+  ```
+  参数：
+  src: 源图像。
+  dst: 目标图像。
+  top, bottom, left, right: 图像每一侧的边界长度（以像素为单位）。在这个示例中，我们定义它们为原始图像大小的 5%。
+  borderType: 定义应用的边界类型。对于此示例，可以是 BORDER_CONSTANT（常量边界）或 BORDER_REPLICATE（复制边界）。
+  value: 如果 borderType 是 BORDER_CONSTANT，则这是用于填充边界像素的值。
 
 # 知识点
 
