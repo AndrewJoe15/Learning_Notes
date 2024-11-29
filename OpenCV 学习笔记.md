@@ -2290,6 +2290,65 @@ double cv::threshold(
 - `maxVal` 非零像素值，`THRESH_BINARY`和`THRESH_BINARY_INV`时使用
 - `type`  阈值类型
 
+### 使用`inRange`进行阈值处理
+
+#### 目标
+
+在本节中你将学习如何：
+
+- 使用 OpenCV 的`cv::inRange`函数执行基本的阈值处理
+- 在 HSV 色彩空间中基于像素值范围检测对象
+
+#### 理论
+
+- 在之前的教程中，我们学习了如何使用 `cv::threshold` 函数执行阈值处理。  
+- 在本教程中，我们将学习如何使用 `cv::inRange` 函数来实现这一操作。  
+- 概念仍然相同，但现在我们需要指定一个像素值范围。
+
+#### HSV 色彩空间
+
+HSV（色相、饱和度、明度）色彩空间是一种类似于 RGB 色彩模型的颜色表示模型。
+
+- **色相（Hue）**：表示颜色的类型，因此在需要根据颜色分割对象的图像处理任务中非常有用。    
+- **饱和度（Saturation）**：表示颜色的纯度，从不饱和（表示灰色阴影）到完全饱和（无白色成分）。  
+- **明度（Value）**：描述颜色的亮度或强度。  
+
+下图展示了 HSV 色彩空间的圆柱体模型。
+![](imgs/OpenCV%20学习笔记.md/2024-11-29-09-33-00.png)
+
+由于 RGB 色彩空间中的颜色是通过三个通道编码的，因此根据颜色对图像中的对象进行分割会更困难一些。
+![](imgs/OpenCV%20学习笔记.md/2024-11-29-09-34-19.png)
+
+#### 代码
+
+完整代码可以在[这里](https://github.com/opencv/opencv/tree/4.x/samples/cpp/tutorial_code/ImgProc/Threshold_inRange.cpp)获取。
+
+- 通过默认或提供的设备捕获视频流
+  ```C++
+   VideoCapture cap(argc > 1 ? atoi(argv[1]) : 0);
+
+   ...
+   while(true){
+    cap >> frame;
+    if(frame.empty())
+    {
+        break;
+    }
+    ...
+   }
+  ```
+- 转换色彩空间
+  ```C++
+  // Convert from BGR to HSV colorspace
+  cvtColor(frame, frame_HSV, COLOR_BGR2HSV);
+  ```
+- 使用`inRange`函数进行阈值操作
+  ```C++
+  // Detect the object based on HSV Range Values
+  inRange(frame_HSV, Scalar(low_H, low_S, low_V), Scalar(high_H, high_S, high_V), frame_threshold);
+  ```
+
+
 
 # 参考资料
 - [OpenCV官方教程](https://docs.opencv.org/4.x/d9/df8/tutorial_root.html)
